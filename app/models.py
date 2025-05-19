@@ -29,6 +29,7 @@ class TranscriptRequest(BaseModel):
     prompt_template: Optional[str] = None
     mode: Optional[Modes] = "comprehensive"  # Default to comprehensive mode
     # output_mode: Optional[OutputMode] = "html"
+    tags: Optional[list[str]] = list()
 
 
 class ClaudePrompt(BaseModel):
@@ -62,3 +63,4 @@ class VideoDataResponse(BaseModel):
     like_count: int
     comment_count: int
     duration: str
+    tags: Optional[list[str]] = []

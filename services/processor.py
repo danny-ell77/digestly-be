@@ -3,31 +3,21 @@ Text processing and LLM integration module for handling transcripts.
 """
 
 from typing import Callable
-from enum import Enum
 from typing import Optional
 from fastapi import HTTPException
-from groq import AsyncGroq
-import os
 from app.logger import get_logger
+from app.models import Modes
+from app.prompts import (
+    MAX_TRANSCRIPT_TOKENS,
+    CHAR_TO_TOKEN_RATIO,
+    KEY_INSIGHTS_LENGTH,
+    PROMPT_TEMPLATES,
+    MODES_TO_OUTPUT_TOKENS,
+    get_system_message,
+)
 
 # Get logger for this module
 logger = get_logger("processor")
-
-# Constants
-MAX_TRANSCRIPT_TOKENS = 10000
-CHAR_TO_TOKEN_RATIO = 4.0
-KEY_INSIGHTS_LENGTH = "5 - 7"
-INCLUDE_RESPONSE_FORMAT = "Please format your response as MARKDOWN"
-
-
-class Modes(str, Enum):
-    TLDR = "tldr"
-    KEY_INSIGHTS = "key_insights"
-    COMPREHENSIVE = "comprehensive"
-    ARTICLE = "article"
-
-    def __str__(self):
-        return str(self.value)
 
 
 def truncate_transcript(transcript_text: str) -> str:
@@ -62,7 +52,7 @@ def truncate_transcript(transcript_text: str) -> str:
     return transcript_text
 
 
-async def get_prompt_template(mode: str, prompt_template: Optional[str] = None) -> str:
+def get_prompt_template(mode: str, prompt_template: Optional[str] = None) -> str:
     """
     Get the prompt template based on the mode.
 
@@ -79,67 +69,15 @@ async def get_prompt_template(mode: str, prompt_template: Optional[str] = None) 
     if prompt_template:
         return prompt_template + "\n\n" + "{transcript}"
 
-    # Otherwise use mode-specific templates
-    if mode == Modes.TLDR:
-        return (
-            "Create a very brief TL;DR summary (2-3 sentences maximum) of this video content:"
-            "\n\n{transcript}"
-        )
-    elif mode == Modes.KEY_INSIGHTS:
-        return (
-            "Extract the {insight_lenght} most important key insights from this video content. "
-            "Format each insight as a bullet point with a brief explanation:"
-            "\n\n{transcript}"
-        )
-    elif mode == Modes.COMPREHENSIVE:
-        return (
-            "Please provide a comprehensive digest of the following video content. "
-            "Include main topics, key points, and any important details:"
-            "\n\n{transcript}"
-        )
-    elif mode == Modes.ARTICLE:
-        return (
-            "Please revise this video content into an article of at least"
-            "2000 words. draw insights and compare with real world information"
-            "\n\n{transcript}"
-        )
+    # Get the mode-specific template from the dictionary
+    mode_str = str(mode).lower()
+    if mode_str in PROMPT_TEMPLATES:
+        return PROMPT_TEMPLATES[mode_str]
     else:
         raise HTTPException(
             status_code=400,
             detail=f"Invalid mode: {mode}. Supported modes are: {', '.join([str(m) for m in Modes])}",
         )
-
-
-async def get_system_message(mode: str) -> str:
-    """
-    Get the system message based on the mode.
-
-    Args:
-        mode (str): The processing mode
-
-    Returns:
-        str: The system message
-    """
-    if mode == Modes.TLDR:
-        system_message = "You are a concise video summarizer. Keep responses extremely brief in at least 200 words"
-    elif mode == Modes.KEY_INSIGHTS:
-        system_message = "You are an insights extractor focusing on the most valuable takeaways. in at least 500 words"
-    elif mode == Modes.COMPREHENSIVE:
-        system_message = "You are a thorough video analyzer providing detailed, structured comprehensive insights into the video content in at least a 1000 words"
-    elif mode == Modes.ARTICLE:
-        system_message = "You are a video content to article translator, bringing new insghts from the video."
-    else:
-        system_message = "You are a video analyzer helping users."
-
-    return system_message + "\n\n" + INCLUDE_RESPONSE_FORMAT
-
-
-modes_to_output_tokens = {
-    Modes.TLDR: 1024,
-    Modes.KEY_INSIGHTS: 2048,
-    Modes.COMPREHENSIVE: 4096,
-    Modes.ARTICLE: 4096,
-}
 
 
 async def process_transcript_with_llm(
@@ -148,6 +86,7 @@ async def process_transcript_with_llm(
     groq_client: Callable,
     prompt_template: Optional[str] = None,
     stream: bool = False,
+    tags: Optional[list[str]] = None,
 ) -> str:
     """
     Process transcript text with LLM.
@@ -167,19 +106,19 @@ async def process_transcript_with_llm(
         transcript_text = truncate_transcript(transcript_text)
 
         # Get prompt template and system message
-        prompt_template = await get_prompt_template(mode, prompt_template)
-        system_message = await get_system_message(mode)
+        prompt_template = get_prompt_template(mode, prompt_template)
+        system_message = get_system_message(mode, tags)
 
         # Format the prompt
         prompt = prompt_template.format(
             transcript=transcript_text,
-            insight_lenght=KEY_INSIGHTS_LENGTH,
+            insight_length=KEY_INSIGHTS_LENGTH,
         )
 
         chat_completion = await groq_client(
             system_message=system_message,
             prompt=prompt,
-            max_output_tokens=modes_to_output_tokens.get(mode, 1024),
+            max_output_tokens=MODES_TO_OUTPUT_TOKENS.get(mode, 1024),
             stream=stream,
         )
         return chat_completion
@@ -189,48 +128,3 @@ async def process_transcript_with_llm(
         raise HTTPException(
             status_code=500, detail=f"Error processing transcript with LLM: {str(e)}"
         )
-
-
-def get_groq_client():
-    """Get Groq API client with API key"""
-    api_key = os.getenv("GROQ_API_KEY")
-
-    if not api_key:
-        raise HTTPException(
-            status_code=500, detail="GROQ_API_KEY not set in environment"
-        )
-
-    client = AsyncGroq(api_key=api_key)
-
-    async def get_chat_completion(
-        system_message: str, prompt: str, max_output_tokens: int, stream: bool = False
-    ):
-        """Get chat completion from Groq API"""
-        completion = await client.chat.completions.create(
-            messages=[
-                {
-                    "role": "system",
-                    "content": system_message,
-                },
-                {
-                    "role": "user",
-                    "content": prompt,
-                },
-            ],
-            model="llama-3.3-70b-versatile",
-            temperature=0.5,
-            max_completion_tokens=max_output_tokens,
-            top_p=1,
-            stop=None,
-            stream=stream,
-        )
-        if stream:
-            # Handle streaming response
-            return completion
-        else:
-            # Handle non-streaming response
-            if not completion.choices or not completion.choices[0].message.content:
-                raise ValueError("Empty content received from analysis.")
-        return completion.choices[0].message.content
-
-    return get_chat_completion
