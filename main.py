@@ -5,7 +5,6 @@ from dotenv import load_dotenv
 from fastapi import FastAPI, HTTPException, Body
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import StreamingResponse
-from premium import process_youtube_video_in_segments
 from services import (
     TranscriptRequest,
     TranscriptResponse,
@@ -216,32 +215,32 @@ async def get_user_profile(user: CurrentUser):
 
 
 # Protected endpoint example with premium features
-@app.post("/premium/process/")
-async def premium_process_endpoint(
-    request: TranscriptRequest,
-):
-    """Premium endpoint that strictly requires authentication"""
+# @app.post("/premium/process/")
+# async def premium_process_endpoint(
+#     request: TranscriptRequest,
+# ):
+#     """Premium endpoint that strictly requires authentication"""
 
-    try:
-        video_id = request.video_id
-        completion = await process_youtube_video_in_segments(
-            youtube_url=f"https://www.youtube.com/watch?v={video_id}",
-            segment_size_minutes=5,  # Example segment size
-        )
+#     try:
+#         video_id = request.video_id
+#         completion = await process_youtube_video_in_segments(
+#             youtube_url=f"https://www.youtube.com/watch?v={video_id}",
+#             segment_size_minutes=5,  # Example segment size
+#         )
 
-        return {
-            "video_id": video_id,
-            "response": completion,
-            "premium": True,
-        }
-    except ValueError as e:
-        logger.error(f"Premium process error: {str(e)}", exc_info=True)
-        raise HTTPException(status_code=404, detail=str(e))
-    except Exception as e:
-        logger.error(f"Unexpected premium process error: {str(e)}", exc_info=True)
-        raise HTTPException(
-            status_code=500, detail=f"Error processing premium request: {str(e)}"
-        )
+#         return {
+#             "video_id": video_id,
+#             "response": completion,
+#             "premium": True,
+#         }
+#     except ValueError as e:
+#         logger.error(f"Premium process error: {str(e)}", exc_info=True)
+#         raise HTTPException(status_code=404, detail=str(e))
+#     except Exception as e:
+#         logger.error(f"Unexpected premium process error: {str(e)}", exc_info=True)
+#         raise HTTPException(
+#             status_code=500, detail=f"Error processing premium request: {str(e)}"
+#         )
 
 
 if __name__ == "__main__":
