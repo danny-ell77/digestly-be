@@ -1,3 +1,4 @@
+import os
 import logging
 
 from app.auth import CurrentUser
@@ -246,4 +247,7 @@ async def get_user_profile(user: CurrentUser):
 if __name__ == "__main__":
     import uvicorn
 
-    uvicorn.run("main:app", host="127.0.0.1", port=8000, reload=True)
+    HOST = os.environ.get("HOST", "0.0.0.0")
+    PORT = os.environ.get("PORT", 8000)
+
+    uvicorn.run("main:app", host=HOST, port=PORT, reload=True)
