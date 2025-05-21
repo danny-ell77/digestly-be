@@ -10,7 +10,6 @@ from app.models import Modes
 from app.prompts import (
     MAX_TRANSCRIPT_TOKENS,
     CHAR_TO_TOKEN_RATIO,
-    KEY_INSIGHTS_LENGTH,
     PROMPT_TEMPLATES,
     MODES_TO_OUTPUT_TOKENS,
     get_system_message,
@@ -84,7 +83,7 @@ async def process_transcript_with_llm(
     transcript_text: str,
     mode: str,
     groq_client: Callable,
-    prompt_template: Optional[str] = None,
+    custom_prompt: Optional[str] = None,
     stream: bool = False,
     tags: Optional[list[str]] = None,
 ) -> str:
@@ -94,7 +93,7 @@ async def process_transcript_with_llm(
     Args:
         transcript_text (str): The transcript text to process
         mode (str): The processing mode
-        prompt_template (str, optional): Custom prompt template. Defaults to None.
+        custom_prompt (str, optional): Custom prompt template. Defaults to None.
 
     Returns:
         str: The LLM response
@@ -106,13 +105,13 @@ async def process_transcript_with_llm(
         transcript_text = truncate_transcript(transcript_text)
 
         # Get prompt template and system message
-        prompt_template = get_prompt_template(mode, prompt_template)
+        prompt_template = get_prompt_template(mode, custom_prompt)
         system_message = get_system_message(mode, tags)
 
         # Format the prompt
         prompt = prompt_template.format(
             transcript=transcript_text,
-            insight_length=KEY_INSIGHTS_LENGTH,
+            # insight_length=KEY_INSIGHTS_LENGTH,
         )
 
         chat_completion = await groq_client(

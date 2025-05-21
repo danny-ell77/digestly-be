@@ -3,8 +3,9 @@ Pydantic models for API requests and responses.
 """
 
 from pydantic import BaseModel
-from typing import Optional
+from typing import Optional, List
 from enum import Enum
+from datetime import datetime
 
 
 class Modes(str, Enum):
@@ -64,3 +65,54 @@ class VideoDataResponse(BaseModel):
     comment_count: int
     duration: str
     tags: Optional[list[str]] = []
+
+
+class IdentityData(BaseModel):
+    email: str
+    email_verified: bool = False
+    phone_verified: bool = False
+    sub: str
+
+
+class Identity(BaseModel):
+    identity_id: str
+    id: str
+    user_id: str
+    identity_data: IdentityData
+    provider: str
+    last_sign_in_at: datetime
+    created_at: datetime
+    updated_at: datetime
+    email: str
+
+
+class AppMetadata(BaseModel):
+    provider: str
+    providers: List[str]
+
+
+class UserMetadata(BaseModel):
+    email: str
+    email_verified: bool = True
+    phone_verified: bool = False
+    sub: str
+
+
+class SupabaseUser(BaseModel):
+    id: str
+    aud: str
+    role: str
+    email: str
+    email_confirmed_at: Optional[datetime] = None
+    phone: str = ""
+    confirmed_at: Optional[datetime] = None
+    last_sign_in_at: Optional[datetime] = None
+    app_metadata: AppMetadata
+    user_metadata: UserMetadata
+    identities: List[Identity]
+    created_at: datetime
+    updated_at: datetime
+    is_anonymous: bool = False
+
+    class Config:
+        from_attributes = True

@@ -12,7 +12,7 @@ LOG_LEVEL = os.environ.get("LOG_LEVEL", "INFO").upper()
 LOG_FORMAT = "%(asctime)s - %(name)s - %(levelname)s - %(message)s"
 
 # Create logger
-logger = logging.getLogger("tube-talk")
+logger = logging.getLogger("digestly")
 logger.setLevel(getattr(logging, LOG_LEVEL))
 
 # Add console handler if not already added
@@ -33,5 +33,5 @@ def get_logger(name: Optional[str] = None) -> logging.Logger:
         A logger instance.
     """
     if name:
-        return logging.getLogger(f"tube-talk.{name}")
+        return logging.getLogger(f"digestly.{name}")
     return logger

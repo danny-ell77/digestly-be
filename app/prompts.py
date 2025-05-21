@@ -83,7 +83,7 @@ PROMPT_TEMPLATES = {
         "\n\n{transcript}"
     ),
     Modes.KEY_INSIGHTS: (
-        "Extract the {insight_lenght} most important key insights from this video content. "
+        "Extract the 5 - 7 most important key insights from this video content. "
         "Format each insight as a bullet point with a brief explanation:"
         "\n\n{transcript}"
     ),

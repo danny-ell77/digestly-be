@@ -1,25 +1,26 @@
-import os
 import logging
-import googleapiclient.discovery
-from groq import AsyncGroq
-from fastapi import FastAPI, HTTPException, Depends
-from fastapi.responses import StreamingResponse
-from fastapi.middleware.cors import CORSMiddleware
-from dotenv import load_dotenv
-from typing import Any
 
+from app.auth import CurrentUser
+from dotenv import load_dotenv
+from fastapi import FastAPI, HTTPException, Body
+from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import StreamingResponse
+from premium import process_youtube_video_in_segments
 from services import (
-    process_transcript_with_llm,
-    extract_video_id,
-    get_transcript,
     TranscriptRequest,
     TranscriptResponse,
     VideoDataResponse,
+    extract_video_id,
+    get_transcript,
+    process_transcript_with_llm,
+)
+from app.deps import (
+    YoutubeClient,
+    GroqClient,
 )
 
-
 load_dotenv()
-logger = logging.getLogger("tube-talk")
+logger = logging.getLogger("digestly")
 
 app = FastAPI(
     title="YouTube Video Processor",
@@ -29,90 +30,13 @@ app = FastAPI(
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],  # Allow all origins for testing
+    allow_origins=["*"],
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
     expose_headers=["*"],
-    max_age=3600,  # Cache preflight requests for 1 hour
+    max_age=86400,  # Cache preflight requests for 24 hours
 )
-
-
-def get_youtube_client():
-    import httplib2
-
-    api_key = os.getenv("YOUTUBE_API_KEY")
-    if not api_key:
-        logger.warning("YouTube API key not found, skipping YouTube Data API")
-        raise ValueError("YouTube API key not set")
-
-    # Create an HTTP object with timeouts
-    http = httplib2.Http(timeout=10)  # 10 second timeout
-
-    # Create a YouTube API client with the HTTP object
-    return googleapiclient.discovery.build(
-        "youtube", "v3", developerKey=api_key, http=http
-    )
-
-
-def get_groq_client():
-    """Get Groq API client with API key"""
-    import asyncio
-
-    api_key = os.getenv("GROQ_API_KEY")
-
-    if not api_key:
-        raise HTTPException(
-            status_code=500, detail="GROQ_API_KEY not set in environment"
-        )
-
-    client = AsyncGroq(api_key=api_key)
-
-    async def get_chat_completion(
-        system_message: str, prompt: str, max_output_tokens: int, stream: bool = False
-    ):
-        """Get chat completion from Groq API"""
-        try:
-            # Add a timeout of 30 seconds to prevent hanging
-            completion = await asyncio.wait_for(
-                client.chat.completions.create(
-                    messages=[
-                        {
-                            "role": "system",
-                            "content": system_message,
-                        },
-                        {
-                            "role": "user",
-                            "content": prompt,
-                        },
-                    ],
-                    model="llama-3.3-70b-versatile",
-                    temperature=0.5,
-                    max_completion_tokens=max_output_tokens,
-                    top_p=1,
-                    stop=None,
-                    stream=stream,
-                ),
-                timeout=30.0,  # 30 second timeout
-            )
-
-            if stream:
-                # Handle streaming response
-                return completion
-            else:
-                # Handle non-streaming response
-                if not completion.choices or not completion.choices[0].message.content:
-                    raise ValueError("Empty content received from analysis.")
-            return completion.choices[0].message.content
-
-        except asyncio.TimeoutError:
-            logger.error("Groq API call timed out after 30 seconds")
-            raise HTTPException(
-                status_code=504,
-                detail="Request timed out while waiting for the LLM response",
-            )
-
-    return get_chat_completion
 
 
 @app.get("/")
@@ -144,7 +68,8 @@ async def get_transcript_endpoint(request: TranscriptRequest):
 @app.post("/process/")
 async def process_transcript_endpoint(
     request: TranscriptRequest,
-    groq_client: Any = Depends(get_groq_client),
+    user: CurrentUser,
+    groq_client: GroqClient,
 ):
     """Get transcript and process it with LLM"""
     logger.info(
@@ -162,7 +87,7 @@ async def process_transcript_endpoint(
             transcript_text=transcript_text,
             mode=mode,
             groq_client=groq_client,
-            prompt_template=request.prompt_template,
+            custom_prompt=request.prompt_template,
             stream=False,
         )
 
@@ -181,9 +106,10 @@ async def process_transcript_endpoint(
 
 
 @app.post("/process/stream/")
-async def process_transcript_endpoint_strem(
-    request: TranscriptRequest,
-    groq_client: Any = Depends(get_groq_client),
+async def process_transcript_endpoint_stream(
+    groq_client: GroqClient,
+    user: CurrentUser,
+    request: TranscriptRequest = Body(...),
 ):
     logger.info(
         f"Starting process_transcript function with video_id: {request.video_id}"
@@ -196,22 +122,16 @@ async def process_transcript_endpoint_strem(
         transcript_text = await get_transcript(video_id, request.language_code)
 
         mode = request.mode.value if request.mode else "comprehensive"
-        completion = await process_transcript_with_llm(
+        stream_generator = await process_transcript_with_llm(
             transcript_text=transcript_text,
             mode=mode,
             groq_client=groq_client,
-            prompt_template=request.prompt_template,
+            custom_prompt=request.prompt_template,
             tags=request.tags,
             stream=True,
         )
 
-        async def stream_generator_wrapper():
-            async for chunk in completion:
-                content = chunk.choices[0].delta.content
-                if content:
-                    yield content
-
-        return StreamingResponse(stream_generator_wrapper())
+        return StreamingResponse(stream_generator)
 
     except ValueError as e:
         logger.error(f"Transcript not found error: {str(e)}", exc_info=True)
@@ -226,9 +146,11 @@ async def process_transcript_endpoint_strem(
 @app.get("/video-data/", response_model=VideoDataResponse)
 async def fetch_video_metadata(
     video_id: str,
-    client: Any = Depends(get_youtube_client),
+    user: CurrentUser,
+    client: YoutubeClient,
 ):
     """Fetch metadata for a YouTube video"""
+    print(user)
     logger.info(f"Fetching video metadata for video_id: {video_id}")
     try:
         try:
@@ -278,6 +200,47 @@ async def fetch_video_metadata(
         logger.error(f"Error fetching video metadata: {str(e)}")
         raise HTTPException(
             status_code=500, detail=f"Error fetching video metadata: {str(e)}"
+        )
+
+
+@app.get("/user/profile/")
+async def get_user_profile(user: CurrentUser):
+    """Get authenticated user profile - requires valid authentication"""
+    return {
+        "id": user.id,
+        "email": user.email,
+        "app_metadata": user.app_metadata,
+        "user_metadata": user.user_metadata,
+        "created_at": user.created_at,
+    }
+
+
+# Protected endpoint example with premium features
+@app.post("/premium/process/")
+async def premium_process_endpoint(
+    request: TranscriptRequest,
+):
+    """Premium endpoint that strictly requires authentication"""
+
+    try:
+        video_id = request.video_id
+        completion = await process_youtube_video_in_segments(
+            youtube_url=f"https://www.youtube.com/watch?v={video_id}",
+            segment_size_minutes=5,  # Example segment size
+        )
+
+        return {
+            "video_id": video_id,
+            "response": completion,
+            "premium": True,
+        }
+    except ValueError as e:
+        logger.error(f"Premium process error: {str(e)}", exc_info=True)
+        raise HTTPException(status_code=404, detail=str(e))
+    except Exception as e:
+        logger.error(f"Unexpected premium process error: {str(e)}", exc_info=True)
+        raise HTTPException(
+            status_code=500, detail=f"Error processing premium request: {str(e)}"
         )
 
 
