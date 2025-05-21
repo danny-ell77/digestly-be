@@ -3,7 +3,7 @@ YouTube transcript/caption fetching functionality.
 This module provides functions for fetching YouTube video transcripts,
 utilizing both the YouTube Data API and the YouTube Transcript API.
 """
-
+import requests
 from youtube_transcript_api import (
     YouTubeTranscriptApi,
     TranscriptsDisabled,
@@ -38,6 +38,20 @@ def extract_video_id(url: str) -> str:
     raise ValueError("Could not extract YouTube video ID from provided URL or ID")
 
 
+class ScraperAPIAdapter(requests.adapters.HTTPAdapter):
+    def send(self, request, **kwargs):
+        # Rewrite the request URL to go through ScraperAPI
+        original_url = request.url
+        scraperapi_url = f'http://api.scraperapi.com/?api_key=d2908cd2f170a16799283633be47a58f&url={original_url}'
+        request.url = scraperapi_url
+        return super().send(request, **kwargs)
+
+# Monkey-patch the session used by the YouTubeTranscriptApi
+session = requests.Session()
+session.mount('http://', ScraperAPIAdapter())
+session.mount('https://', ScraperAPIAdapter())
+
+
 async def fetch_transcript_api(video_id: str, language_code: str = None) -> str:
     """
     Fetch transcript using YouTube Transcript API.
@@ -60,7 +74,7 @@ async def fetch_transcript_api(video_id: str, language_code: str = None) -> str:
         loop = asyncio.get_event_loop()
         transcript_list = await loop.run_in_executor(
             None,
-            lambda: YouTubeTranscriptApi.get_transcript(video_id, languages=languages),
+            lambda: YouTubeTranscriptApi(http_client=session).fetch(video_id, languages=languages),
         )
 
         # Format transcript to plain text
