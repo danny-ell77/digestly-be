@@ -1,7 +1,7 @@
 import os
 import logging
 
-from app.auth import CurrentUser
+from app.auth import CurrentUser, CurrentOptionalUser
 from dotenv import load_dotenv
 from fastapi import FastAPI, HTTPException, Body
 from fastapi.middleware.cors import CORSMiddleware
@@ -146,7 +146,7 @@ async def process_transcript_endpoint_stream(
 @app.get("/video-data/", response_model=VideoDataResponse)
 async def fetch_video_metadata(
     video_id: str,
-    user: CurrentUser,
+    user: CurrentOptionalUser,
     client: YoutubeClient,
 ):
     """Fetch metadata for a YouTube video"""
