@@ -3,13 +3,15 @@ YouTube transcript/caption fetching functionality.
 This module provides functions for fetching YouTube video transcripts,
 utilizing both the YouTube Data API and the YouTube Transcript API.
 """
-import requests
+
+import os
 from youtube_transcript_api import (
     YouTubeTranscriptApi,
     TranscriptsDisabled,
     NoTranscriptFound,
 )
 from youtube_transcript_api.formatters import TextFormatter
+from youtube_transcript_api.proxies import WebshareProxyConfig
 import re
 from app.logger import get_logger
 
@@ -38,18 +40,18 @@ def extract_video_id(url: str) -> str:
     raise ValueError("Could not extract YouTube video ID from provided URL or ID")
 
 
-class ScraperAPIAdapter(requests.adapters.HTTPAdapter):
-    def send(self, request, **kwargs):
-        # Rewrite the request URL to go through ScraperAPI
-        original_url = request.url
-        scraperapi_url = f'http://api.scraperapi.com/?api_key=d2908cd2f170a16799283633be47a58f&url={original_url}'
-        request.url = scraperapi_url
-        return super().send(request, **kwargs)
+# class ScraperAPIAdapter(requests.adapters.HTTPAdapter):
+#     def send(self, request, **kwargs):
+#         # Rewrite the request URL to go through ScraperAPI
+#         original_url = request.url
+#         scraperapi_url = f'http://api.scraperapi.com/?api_key=d2908cd2f170a16799283633be47a58f&url={original_url}'
+#         request.url = scraperapi_url
+#         return super().send(request, **kwargs)
 
-# Monkey-patch the session used by the YouTubeTranscriptApi
-session = requests.Session()
-session.mount('http://', ScraperAPIAdapter())
-session.mount('https://', ScraperAPIAdapter())
+# # Monkey-patch the session used by the YouTubeTranscriptApi
+# session = requests.Session()
+# session.mount('http://', ScraperAPIAdapter())
+# session.mount('https://', ScraperAPIAdapter())
 
 
 async def fetch_transcript_api(video_id: str, language_code: str = None) -> str:
@@ -71,10 +73,22 @@ async def fetch_transcript_api(video_id: str, language_code: str = None) -> str:
     try:
         # Get video transcript - run in a thread pool as YouTubeTranscriptApi is synchronous
         languages = [language_code] if language_code else None
+        proxy_username = os.getenv("PROXY_USERNAME")
+        proxy_password = os.getenv("PROXY_PASSWORD")
+        if proxy_username and proxy_password:
+            # Use proxy if credentials are provided
+            ytt_api = YouTubeTranscriptApi(
+                proxy_config=WebshareProxyConfig(
+                    proxy_username=proxy_username,
+                    proxy_password=proxy_password,
+                )
+            )
+        else:
+            ytt_api = YouTubeTranscriptApi()
         loop = asyncio.get_event_loop()
         transcript_list = await loop.run_in_executor(
             None,
-            lambda: YouTubeTranscriptApi(http_client=session).fetch(video_id, languages=languages),
+            lambda: ytt_api.fetch(video_id, languages=languages),
         )
 
         # Format transcript to plain text
