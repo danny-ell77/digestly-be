@@ -6,6 +6,7 @@ from pydantic import BaseModel
 from typing import Optional, List
 from enum import Enum
 from datetime import datetime
+from typing import TypedDict
 
 
 class Modes(str, Enum):
@@ -116,3 +117,47 @@ class SupabaseUser(BaseModel):
 
     class Config:
         from_attributes = True
+
+
+class DigestlyVideoType(TypedDict):
+    video_id: str
+    title: str
+    description: str
+    channel_title: str
+    tags: list[str]
+    published_at: str
+    thumbnail_url: str
+    view_count: int
+    like_count: int
+    comment_count: int
+    duration: str
+
+
+def to_digestly_type(data: dict) -> DigestlyVideoType:
+    """
+    Transform YouTube API response data into Digestly video type format.
+    Assumes data contains nested snippet, statistics, and contentDetails.
+
+    Args:
+        data: Complete YouTube video data with nested structures
+
+    Returns:
+        DigestlyVideoType: Formatted video data
+    """
+    snippet = data.get("snippet", {})
+    statistics = data.get("statistics", {})
+    content_details = data.get("contentDetails", {})
+
+    return DigestlyVideoType(
+        video_id=data.get("id", ""),
+        title=snippet.get("title", ""),
+        description=snippet.get("description", ""),
+        channel_title=snippet.get("channelTitle", ""),
+        tags=snippet.get("tags", []),
+        published_at=snippet.get("publishedAt", ""),
+        thumbnail_url=snippet.get("thumbnails", {}).get("high", {}).get("url", ""),
+        view_count=int(statistics.get("viewCount", 0)),
+        like_count=int(statistics.get("likeCount", 0)),
+        comment_count=int(statistics.get("commentCount", 0)),
+        duration=content_details.get("duration", ""),
+    )

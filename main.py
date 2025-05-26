@@ -1,7 +1,9 @@
 import os
 import logging
-
-from app.auth import CurrentUser, OptionalUser
+from app.auth import CurrentUser
+from app.models import to_digestly_type
+from app.db import SupabaseClient
+from app.credits import check_credits, deduct_credit
 from dotenv import load_dotenv
 from fastapi import FastAPI, HTTPException, Body
 from fastapi.middleware.cors import CORSMiddleware
@@ -75,6 +77,9 @@ async def process_transcript_endpoint(
     logger.info(
         f"Starting process_transcript function with video_id: {request.video_id}"
     )
+
+    await check_credits(user)
+
     try:
         # result = await process_youtube_video_in_segments(
         #     youtube_url=f"https://www.youtube.com/watch?v={request.video_id}"
@@ -91,9 +96,12 @@ async def process_transcript_endpoint(
             stream=False,
         )
 
+        # Deduct credit after successful processing
+        new_credit_balance = await deduct_credit(user["id"])
         return {
             "video_id": video_id,
             "response": completion,
+            "credits_remaining": new_credit_balance,
         }
     except ValueError as e:
         logger.error(f"Transcript not found error: {str(e)}", exc_info=True)
@@ -114,14 +122,16 @@ async def process_transcript_endpoint_stream(
     logger.info(
         f"Starting process_transcript function with video_id: {request.video_id}"
     )
+    await check_credits(user)
+
     try:
-        # result = await process_youtube_video_in_segments(
-        #     youtube_url=f"https://www.youtube.com/watch?v={request.video_id}"
-        # )
+        mode = request.mode.value if request.mode else "comprehensive"
+
         video_id = request.video_id
         transcript_text = await get_transcript(video_id, request.language_code)
-
-        mode = request.mode.value if request.mode else "comprehensive"
+        # transcript_text = process_youtube_video(
+        #     f"https://www.youtube.com/watch?v={video_id}"
+        # )
         stream_generator = await process_transcript_with_llm(
             transcript_text=transcript_text,
             mode=mode,
@@ -131,7 +141,15 @@ async def process_transcript_endpoint_stream(
             stream=True,
         )
 
-        return StreamingResponse(stream_generator)
+        async def stream_generator_wrapper(generator):
+            async for chunk in generator:
+                yield chunk
+            new_credit_balance = await deduct_credit(user["id"])
+            logger.info(
+                f"Deducted credit from user {user['id']}, new balance: {new_credit_balance}"
+            )
+
+        return StreamingResponse(stream_generator_wrapper(stream_generator))
 
     except ValueError as e:
         logger.error(f"Transcript not found error: {str(e)}", exc_info=True)
@@ -146,11 +164,9 @@ async def process_transcript_endpoint_stream(
 @app.get("/video-data/", response_model=VideoDataResponse)
 async def fetch_video_metadata(
     video_id: str,
-    user: OptionalUser,
     client: YoutubeClient,
 ):
     """Fetch metadata for a YouTube video"""
-    print(user)
     logger.info(f"Fetching video metadata for video_id: {video_id}")
     try:
         try:
@@ -164,35 +180,17 @@ async def fetch_video_metadata(
             .execute()
         )
 
-        with open("video_data.json", "w") as f:
-            import json
+        # FOR DEBUGGING PURPOSES
+        # with open("video_data.json", "w") as f:
+        #     import json
 
-            json.dump(video_data, f, indent=4)
+        #     json.dump(video_data, f, indent=4)
 
         if not video_data.get("items"):
             logger.warning(f"No video found with ID: {video_id}")
             raise ValueError(f"No video found with ID: {video_id}")
 
-        video_info = video_data["items"][0]
-        snippet = video_info["snippet"]
-        statistics = video_info.get("statistics", {})
-
-        # Format the response
-        return {
-            "video_id": video_id,
-            "title": snippet.get("title", ""),
-            "description": snippet.get("description", ""),
-            "channel_title": snippet.get("channelTitle", ""),
-            "tags": snippet.get("tags", []),
-            "published_at": snippet.get("publishedAt", ""),
-            "thumbnail_url": snippet.get("thumbnails", {})
-            .get("high", {})
-            .get("url", ""),
-            "view_count": int(statistics.get("viewCount", 0)),
-            "like_count": int(statistics.get("likeCount", 0)),
-            "comment_count": int(statistics.get("commentCount", 0)),
-            "duration": video_info.get("contentDetails", {}).get("duration", ""),
-        }
+        return to_digestly_type(video_data["items"][0])
     except ValueError as e:
         logger.error(f"Video not found error: {str(e)}")
         raise HTTPException(status_code=404, detail=str(e))
@@ -206,42 +204,22 @@ async def fetch_video_metadata(
 @app.get("/user/profile/")
 async def get_user_profile(user: CurrentUser):
     """Get authenticated user profile - requires valid authentication"""
+    # Create Supabase client to get updated profile info
+    supabase_client = SupabaseClient()
+    profile = await supabase_client.get_profile(user["id"])
+
+    credits_ = profile.get("credits", 0) if profile else 0
+    is_premium = profile.get("isPremium", False) if profile else False
+
     return {
-        "id": user.id,
-        "email": user.email,
-        "app_metadata": user.app_metadata,
-        "user_metadata": user.user_metadata,
-        "created_at": user.created_at,
+        "id": user["id"],
+        "email": user["email"],
+        "app_metadata": user["app_metadata"],
+        "user_metadata": user["user_metadata"],
+        "created_at": user["created_at"],
+        "credits": credits_,
+        "isPremium": is_premium,
     }
-
-
-# Protected endpoint example with premium features
-# @app.post("/premium/process/")
-# async def premium_process_endpoint(
-#     request: TranscriptRequest,
-# ):
-#     """Premium endpoint that strictly requires authentication"""
-
-#     try:
-#         video_id = request.video_id
-#         completion = await process_youtube_video_in_segments(
-#             youtube_url=f"https://www.youtube.com/watch?v={video_id}",
-#             segment_size_minutes=5,  # Example segment size
-#         )
-
-#         return {
-#             "video_id": video_id,
-#             "response": completion,
-#             "premium": True,
-#         }
-#     except ValueError as e:
-#         logger.error(f"Premium process error: {str(e)}", exc_info=True)
-#         raise HTTPException(status_code=404, detail=str(e))
-#     except Exception as e:
-#         logger.error(f"Unexpected premium process error: {str(e)}", exc_info=True)
-#         raise HTTPException(
-#             status_code=500, detail=f"Error processing premium request: {str(e)}"
-#         )
 
 
 if __name__ == "__main__":
