@@ -2,7 +2,7 @@ import os
 import logging
 from app.auth import CurrentUser
 from app.models import to_digestly_type
-from app.db import SupabaseClient
+from app.db import supabase_client
 from app.credits import check_credits, deduct_credit
 from dotenv import load_dotenv
 from fastapi import FastAPI, HTTPException, Body
@@ -96,12 +96,17 @@ async def process_transcript_endpoint(
             stream=False,
         )
 
+        # Check if anonymous user or regular user
+        is_anonymous = user.get("isAnonymous", False)
+
         # Deduct credit after successful processing
-        new_credit_balance = await deduct_credit(user["id"])
+        new_credit_balance = await deduct_credit(user["id"], is_anonymous)
+
         return {
             "video_id": video_id,
             "response": completion,
             "credits_remaining": new_credit_balance,
+            "is_anonymous": is_anonymous,
         }
     except ValueError as e:
         logger.error(f"Transcript not found error: {str(e)}", exc_info=True)
@@ -144,10 +149,7 @@ async def process_transcript_endpoint_stream(
         async def stream_generator_wrapper(generator):
             async for chunk in generator:
                 yield chunk
-            new_credit_balance = await deduct_credit(user["id"])
-            logger.info(
-                f"Deducted credit from user {user['id']}, new balance: {new_credit_balance}"
-            )
+            await deduct_credit(user["id"])
 
         return StreamingResponse(stream_generator_wrapper(stream_generator))
 
@@ -205,7 +207,6 @@ async def fetch_video_metadata(
 async def get_user_profile(user: CurrentUser):
     """Get authenticated user profile - requires valid authentication"""
     # Create Supabase client to get updated profile info
-    supabase_client = SupabaseClient()
     profile = await supabase_client.get_profile(user["id"])
 
     credits_ = profile.get("credits", 0) if profile else 0
@@ -219,6 +220,21 @@ async def get_user_profile(user: CurrentUser):
         "created_at": user["created_at"],
         "credits": credits_,
         "isPremium": is_premium,
+    }
+
+
+@app.post("/user/profiles-anon/")
+async def create_anonymous_profile(data: dict = Body(...)):
+    """Create an anonymous user profile with initial credits"""
+    anonymous_profile = await supabase_client.create_anonymous_profile(data)
+    if not anonymous_profile:
+        raise HTTPException(
+            status_code=500, detail="Failed to create anonymous user profile"
+        )
+    return {
+        "anon_user_id": anonymous_profile["anon_user_id"],
+        "credits": anonymous_profile.get("credits", 0),
+        "isAnonymous": True,
     }
 
 

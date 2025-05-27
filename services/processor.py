@@ -19,7 +19,41 @@ from app.prompts import (
 logger = get_logger("processor")
 
 
-def truncate_transcript(transcript_text: str) -> str:
+def _infer_output_tokens(mode: str, transcript_text: str) -> int:
+    """
+    Dynamically scales output token allocation based on input length to optimize
+    token economy, summary quality, and user experience.
+
+    Benefits:
+    - Prevents over-allocation for short content and under-allocation for long content
+    - Maintains appropriate summary length expectations per mode (TLDR vs comprehensive)
+    - Includes 3x cap to prevent runaway token usage while ensuring minimum viable output
+    - Optimizes LLM performance by providing appropriate output constraints
+    """
+    mode_str = str(mode).lower()
+    base_output_tokens = MODES_TO_OUTPUT_TOKENS.get(mode_str, 1024)
+
+    estimated_input_tokens = len(transcript_text) / CHAR_TO_TOKEN_RATIO
+
+    # Scale output tokens based on input length with a reasonable cap
+    # For every additional 1000 input tokens beyond 1000, add 20% more to base output tokens
+    input_scale_factor = 1.0
+    if estimated_input_tokens > 1000:
+        # Calculate scaling factor based on input size (max 3x)
+        input_scale_factor = min(
+            3.0, 1.0 + ((estimated_input_tokens - 1000) / 1000) * 0.2
+        )
+        logger.debug(
+            f"Scaling output tokens by factor of {input_scale_factor} based on input length"
+        )
+
+    # Calculate final output tokens
+    max_output_tokens = int(base_output_tokens * input_scale_factor)
+    logger.debug(f"Using {max_output_tokens} output tokens for mode {mode}")
+    return max_output_tokens
+
+
+def _truncate_transcript(transcript_text: str) -> str:
     """
     Truncate the transcript text if it's too long.
 
@@ -51,7 +85,7 @@ def truncate_transcript(transcript_text: str) -> str:
     return transcript_text
 
 
-def get_prompt_template(mode: str, prompt_template: Optional[str] = None) -> str:
+def _get_prompt_template(mode: str, prompt_template: Optional[str] = None) -> str:
     """
     Get the prompt template based on the mode.
 
@@ -102,10 +136,10 @@ async def process_transcript_with_llm(
         HTTPException: If there's an error processing the transcript
     """
     try:
-        transcript_text = truncate_transcript(transcript_text)
+        transcript_text = _truncate_transcript(transcript_text)
 
         # Get prompt template and system message
-        prompt_template = get_prompt_template(mode, custom_prompt)
+        prompt_template = _get_prompt_template(mode, custom_prompt)
         system_message = get_system_message(mode, tags)
 
         # Format the prompt
@@ -117,7 +151,7 @@ async def process_transcript_with_llm(
         chat_completion = await groq_client(
             system_message=system_message,
             prompt=prompt,
-            max_output_tokens=MODES_TO_OUTPUT_TOKENS.get(mode, 1024),
+            max_output_tokens=_infer_output_tokens(mode, transcript_text),
             stream=stream,
         )
         return chat_completion

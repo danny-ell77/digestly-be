@@ -12,12 +12,6 @@ load_dotenv()
 
 logger = logging.getLogger("digestly")
 
-"""
-Supabase Service role keys bypass RLS (Row Level Security) and allows
-full access to the database.
-"""
-
-# Supabase configuration
 SUPABASE_URL = os.getenv("SUPABASE_URL", "https://sdmcnnyuiyzmazdakglz.supabase.co")
 SUPABASE_SERVICE_ROLE_KEY = os.getenv("SUPABASE_SERVICE_ROLE_KEY", "")
 
@@ -53,7 +47,10 @@ class SupabaseClient:
                 response = await client.get(
                     f"{self.url}/rest/v1/profiles",
                     headers=self.headers,
-                    params={"user_id": f"eq.{user_id}", "select": "*"},
+                    params={
+                        "or": f"(user_id.eq.{user_id},anon_user_id.eq.{user_id})",
+                        "select": "*",
+                    },
                 )
                 print(response.json(), response.status_code, "=" * 50)
                 if response.status_code == 200 and response.json():
@@ -81,7 +78,10 @@ class SupabaseClient:
                 response = await client.patch(
                     f"{self.url}/rest/v1/profiles",
                     headers=self.headers,
-                    params={"user_id": f"eq.{user_id}"},
+                    params={
+                        "or": f"(user_id.eq.{user_id},anon_user_id.eq.{user_id})",
+                        "select": "*",
+                    },
                     json={"credits": credits},
                 )
 
@@ -109,7 +109,6 @@ class SupabaseClient:
             New credit balance if successful, None otherwise
         """
         try:
-            # Get current profile data
             profile = await self.get_profile(user_id)
             if not profile:
                 logger.warning(
@@ -119,14 +118,12 @@ class SupabaseClient:
 
             current_credits = profile.get("credits", 0)
 
-            # Don't allow negative credits
             if current_credits <= 0:
                 logger.warning(
                     f"User {user_id} has insufficient credits ({current_credits})"
                 )
                 return 0
 
-            # Update credits
             new_credits = current_credits - 1
             success = await self.update_credits(user_id, new_credits)
 
@@ -135,6 +132,35 @@ class SupabaseClient:
             return None
         except Exception as e:
             logger.exception(f"Error deducting credit: {str(e)}")
+            return None
+
+    async def create_anonymous_profile(self, data: dict):
+        """
+        Create an anonymous user profile with initial credits.
+
+        Args:
+            data: Additional data for the anonymous profile
+
+        Returns:
+            The created anonymous profile data
+        """
+        try:
+            async with httpx.AsyncClient() as client:
+                response = await client.post(
+                    f"{self.url}/rest/v1/profiles",
+                    headers=self.headers,
+                    json={
+                        "timezone": data.get("timezone", "UTC"),
+                    },
+                )
+
+                if response.status_code in (200, 201):
+                    return response.json()[0]
+                else:
+                    logger.error(f"Failed to create anonymous profile: {response.text}")
+                    return None
+        except Exception as e:
+            logger.exception(f"Error creating anonymous profile: {str(e)}")
             return None
 
 
