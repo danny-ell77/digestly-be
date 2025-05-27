@@ -9,15 +9,13 @@ from app.models import Modes
 MAX_TRANSCRIPT_TOKENS = 10000
 CHAR_TO_TOKEN_RATIO = 4.0
 KEY_INSIGHTS_LENGTH = "5 - 7"
-INCLUDE_RESPONSE_FORMAT = "Please format your response as MARKDOWN"
-TAG_BASED_RESPONSE_FORMAT = (
-    "Please provide a response based on the following tags: {tags}"
-)
+INCLUDE_RESPONSE_FORMAT = "Format your response in clean, readable MARKDOWN"
+TAG_BASED_RESPONSE_FORMAT = "Focus on these relevant topics: {tags}"
 PROGRAMMING_FORMAT_RESPONSE = (
-    "Please provide COMPREHENSIVE CODE SAMPLES in MARKDOWN FORMAT based on the prompt"
+    "Include practical code examples and implementations in MARKDOWN format"
 )
 MATH_FORMAT_RESPONSE = (
-    "Please provide COMPREHENSIVE MATH FORMULAS in MARKDOWN FORMAT based on the prompt"
+    "Include mathematical formulas, equations, and worked examples in MARKDOWN format"
 )
 
 # Programming-related YouTube video tags
@@ -79,43 +77,63 @@ MODES_TO_OUTPUT_TOKENS = {
 # Prompt templates for different modes
 PROMPT_TEMPLATES = {
     Modes.TLDR: (
-        "Create a very brief TL;DR summary (2-3 sentences maximum) of this video content:"
+        "Write a concise summary capturing the essence of this content in 2-3 sentences. "
+        "Write as if you are the original creator sharing the main takeaway:"
         "\n\n{transcript}"
     ),
     Modes.KEY_INSIGHTS: (
-        "Extract the 5 - 7 most important key insights from this video content. "
-        "Format each insight as a bullet point with a brief explanation:"
+        "Present the 5-7 most valuable insights from this content. "
+        "Write each as a key point with explanation, as if you're the creator highlighting what matters most:"
         "\n\n{transcript}"
     ),
     Modes.COMPREHENSIVE: (
-        "Please provide a comprehensive digest of the following video content. "
-        "Include main topics, key points, and any important details:"
+        "Transform this content into a detailed, well-structured piece. "
+        "Cover all main topics and important details as if you're the original creator "
+        "expanding on your ideas for readers:"
         "\n\n{transcript}"
     ),
     Modes.ARTICLE: (
-        "Please revise this video content into an article of at least"
-        "2000 words. draw insights and compare with real world information"
+        "Rewrite this content as a comprehensive 2000+ word article. "
+        "Expand on the ideas, add context, draw connections, and provide deeper insights. "
+        "Write in the creator's voice as if they're sharing their expertise with readers:"
         "\n\n{transcript}"
     ),
 }
 
 DEFAULT_PROMPT_TEMPLATE = (
-    "You are a video analyzer helping users."
-    " Please provide a detailed analysis of the video content."
+    "Transform this video content into well-written material. "
+    "Write naturally as if you are the original creator sharing your knowledge:"
     "\n\n{transcript}"
 )
 
 # System messages for different modes
 SYSTEM_MESSAGES = {
-    Modes.TLDR: "You are a concise video summarizer. Keep responses extremely brief in at least 200 words",
-    Modes.KEY_INSIGHTS: "You are an insights extractor focusing on the most valuable takeaways. in at least 500 words",
-    Modes.COMPREHENSIVE: "You are a thorough video analyzer providing detailed, structured comprehensive insights into the video content in at least a 1000 words",
-    Modes.ARTICLE: "You are a video content to article translator, bringing new insights from the video.",
+    Modes.TLDR: (
+        "You are transforming video content into concise written form. "
+        "Write naturally in the creator's voice, not as a third-party summarizer. "
+        "Aim for at least 200 words while staying focused and direct."
+    ),
+    Modes.KEY_INSIGHTS: (
+        "You are the content creator sharing your key insights with readers. "
+        "Present your most important points clearly and engagingly. "
+        "Write at least 500 words, focusing on what truly matters."
+    ),
+    Modes.COMPREHENSIVE: (
+        "You are the content creator writing a comprehensive guide on your topic. "
+        "Share your knowledge thoroughly and systematically. "
+        "Write at least 1000 words, covering all important aspects in depth."
+    ),
+    Modes.ARTICLE: (
+        "You are the content creator writing an in-depth article based on your expertise. "
+        "Expand on your ideas, provide context, and offer deeper insights. "
+        "Create engaging, informative content that stands alone as valuable reading."
+    ),
 }
 
 DEFAULT_SYSTEM_MESSAGE = (
-    "You are a video analyzer helping users. Please provide a detailed analysis of the video content."
-    " Keep responses extremely brief in at least 200 words"
+    "You are transforming video content into well-written material. "
+    "Write naturally as the original creator sharing knowledge with readers. "
+    "Aim for at least 200 words while maintaining the creator's authentic voice."
 )
 
 
@@ -124,6 +142,7 @@ def get_system_message(mode: Modes, tags: Optional[list[str]]) -> str:
     Get the system message for article mode with tag-specific formatting.
 
     Args:
+        mode (Modes): Processing mode
         tags (Optional[list[str]]): List of video tags
 
     Returns:
@@ -132,8 +151,7 @@ def get_system_message(mode: Modes, tags: Optional[list[str]]) -> str:
     message = SYSTEM_MESSAGES.get(mode, DEFAULT_SYSTEM_MESSAGE)
 
     if tags:
-        # This is a simplifed cheack. In the future, we can use a more sophisticated method
-        # to check if the tags are related to programming or math like tokenization
+        # Check for programming or math content to add specialized formatting
         if set(tags) & set(PROGRAMMING_TAGS):
             message += f" {PROGRAMMING_FORMAT_RESPONSE}"
         elif set(tags) & set(MATH_TAGS):
