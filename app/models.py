@@ -32,6 +32,7 @@ class TranscriptRequest(BaseModel):
     mode: Optional[Modes] = "comprehensive"  # Default to comprehensive mode
     # output_mode: Optional[OutputMode] = "html"
     tags: Optional[list[str]] = list()
+    duration: int
 
 
 class ClaudePrompt(BaseModel):

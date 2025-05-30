@@ -1,7 +1,7 @@
 import os
 import logging
 from app.auth import CurrentUser
-from app.models import to_digestly_type
+from app.models import to_digestly_type, Modes
 from app.db import supabase_client
 from app.credits import check_credits, deduct_credit
 from dotenv import load_dotenv
@@ -15,6 +15,7 @@ from services import (
     extract_video_id,
     get_transcript,
     process_transcript_with_llm,
+    process_transcript_in_chunks,
 )
 from app.deps import (
     YoutubeClient,
@@ -80,33 +81,33 @@ async def process_transcript_endpoint(
 
     await check_credits(user)
 
+    processor = (
+        process_transcript_in_chunks
+        if request.duration > 2400
+        and request.mode in [Modes.ARTICLE, Modes.COMPREHENSIVE]
+        else process_transcript_with_llm
+    )
+
     try:
-        # result = await process_youtube_video_in_segments(
-        #     youtube_url=f"https://www.youtube.com/watch?v={request.video_id}"
-        # )
         video_id = request.video_id
         transcript_text = await get_transcript(video_id, request.language_code)
 
         mode = request.mode.value if request.mode else "comprehensive"
-        completion = await process_transcript_with_llm(
+        completion = await processor(
             transcript_text=transcript_text,
             mode=mode,
             groq_client=groq_client,
             custom_prompt=request.prompt_template,
             stream=False,
+            tags=request.tags,
         )
 
-        # Check if anonymous user or regular user
-        is_anonymous = user.get("isAnonymous", False)
-
-        # Deduct credit after successful processing
-        new_credit_balance = await deduct_credit(user["id"], is_anonymous)
+        new_credit_balance = await deduct_credit(user["id"])
 
         return {
             "video_id": video_id,
             "response": completion,
             "credits_remaining": new_credit_balance,
-            "is_anonymous": is_anonymous,
         }
     except ValueError as e:
         logger.error(f"Transcript not found error: {str(e)}", exc_info=True)
@@ -241,7 +242,7 @@ async def create_anonymous_profile(data: dict = Body(...)):
 if __name__ == "__main__":
     import uvicorn
 
-    HOST = os.environ.get("HOST", "0.0.0.0")
-    PORT = os.environ.get("PORT", 8000)
+    HOST = os.environ.get("HOST", "localhost")
+    PORT = os.environ.get("PORT", 5000)
 
     uvicorn.run("main:app", host=HOST, port=int(PORT), reload=True)

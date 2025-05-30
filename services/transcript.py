@@ -1,9 +1,3 @@
-"""
-YouTube transcript/caption fetching functionality.
-This module provides functions for fetching YouTube video transcripts,
-utilizing both the YouTube Data API and the YouTube Transcript API.
-"""
-
 import os
 from youtube_transcript_api import (
     YouTubeTranscriptApi,
@@ -15,16 +9,13 @@ from youtube_transcript_api.proxies import WebshareProxyConfig
 import re
 from app.logger import get_logger
 
-# Get logger for this module
 logger = get_logger("transcript")
 
-# Constants
 DEFAULT_LANGUAGE = "en"
 
 
 def extract_video_id(url: str) -> str:
     """Extract YouTube video ID from URL"""
-    # Match YouTube URL patterns
     patterns = [
         r"(?:v=|\/)([0-9A-Za-z_-]{11}).*",
         r"(?:embed\/)([0-9A-Za-z_-]{11})",
@@ -71,12 +62,10 @@ async def fetch_transcript_api(video_id: str, language_code: str = None) -> str:
     import asyncio
 
     try:
-        # Get video transcript - run in a thread pool as YouTubeTranscriptApi is synchronous
         languages = [language_code] if language_code else None
         proxy_username = os.getenv("PROXY_USERNAME")
         proxy_password = os.getenv("PROXY_PASSWORD")
         if proxy_username and proxy_password:
-            # Use proxy if credentials are provided
             ytt_api = YouTubeTranscriptApi(
                 proxy_config=WebshareProxyConfig(
                     proxy_username=proxy_username,
@@ -91,7 +80,6 @@ async def fetch_transcript_api(video_id: str, language_code: str = None) -> str:
             lambda: ytt_api.fetch(video_id, languages=languages),
         )
 
-        # Format transcript to plain text
         formatter = TextFormatter()
         transcript_text = formatter.format_transcript(transcript_list)
         logger.debug("Successfully retrieved transcript using YouTube Transcript API")
@@ -123,12 +111,10 @@ async def get_transcript(video_id: str, language_code: str = None) -> str:
     try:
         video_id = extract_video_id(video_id)
     except ValueError:
-        # If it's not a URL, assume it's already a valid video ID
         pass
 
     language = language_code or DEFAULT_LANGUAGE
 
-    # Try to get transcript from YouTube Data API first
     try:
         transcript_text = await fetch_transcript_api(video_id, language)
     except Exception as transcript_error:

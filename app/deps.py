@@ -62,7 +62,7 @@ def get_groq_client():
                     stop=None,
                     stream=stream,
                 ),
-                timeout=30.0,  # 30 second timeout
+                timeout=300.0,  # 300 second timeout
             )
 
             if stream:

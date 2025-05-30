@@ -158,3 +158,27 @@ def get_system_message(mode: Modes, tags: Optional[list[str]]) -> str:
             message += f" {MATH_FORMAT_RESPONSE}"
 
     return message + "\n\n" + INCLUDE_RESPONSE_FORMAT
+
+
+def get_prompt_template(
+    mode: str, prompt_template: Optional[str] = None
+) -> str | None:
+    """
+    Get the prompt template based on the mode.
+
+    Args:
+        mode (str): The processing mode (tldr, key_insights, comprehensive)
+        prompt_template (str, optional): Custom prompt template. Defaults to None.
+
+    Returns:
+        str: The prompt template
+
+    Raises:
+        HTTPException: If the mode is invalid
+    """
+    if prompt_template:
+        return prompt_template + "\n\n" + "{transcript}"
+
+    # Get the mode-specific template from the dictionary
+    mode_str = str(mode).lower()
+    return PROMPT_TEMPLATES.get(mode_str)
