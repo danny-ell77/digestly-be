@@ -3,7 +3,10 @@ from .transcript import (
     get_transcript,
     fetch_transcript_api,
 )
-from .processor import process_transcript_with_llm
+from .processor import (
+    process_transcript_with_llm,
+    process_transcript_in_chunks,
+)
 from app.models import (
     Modes,
     TranscriptRequest,
@@ -19,6 +22,7 @@ __all__ = [
     "get_transcript",
     "fetch_transcript_api",
     "process_transcript_with_llm",
+    "process_transcript_in_chunks",
     "Modes",
     "TranscriptRequest",
     "VideoProcessorResponse",
