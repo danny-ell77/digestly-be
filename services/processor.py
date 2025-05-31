@@ -317,7 +317,7 @@ async def process_transcript_in_chunks(
 
         for i, chunk in enumerate(chunks):
             if i > 0:
-                asyncio.sleep(20)  # Small delay to avoid rate limiting
+                await asyncio.sleep(20)  # Small delay to avoid rate limiting
 
             chunk_system_message = base_system_message
 
