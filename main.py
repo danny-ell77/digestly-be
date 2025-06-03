@@ -7,6 +7,7 @@ from app.model_selector import ModelSelector
 from app.auth import CurrentUser
 from app.models import (
     TranscriptRequest,
+    TranscriptResponse,
     VideoDataResponse,
     to_digestly_type,
 )
@@ -50,7 +51,7 @@ async def root():
     return {"message": "YouTube Video Processor API is running"}
 
 
-@app.post("/transcript/", response_model=TranscripResponse)
+@app.post("/transcript/", response_model=TranscriptResponse)
 async def get_transcript_endpoint(request: TranscriptRequest):
     """Get transcript from YouTube video ID"""
     try:
