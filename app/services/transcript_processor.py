@@ -4,7 +4,6 @@ from youtube_transcript_api import (
     TranscriptsDisabled,
     NoTranscriptFound,
 )
-from youtube_transcript_api.formatters import TextFormatter
 from youtube_transcript_api.proxies import WebshareProxyConfig
 import re
 from app.logger import get_logger
@@ -31,20 +30,6 @@ def extract_video_id(url: str) -> str:
     raise ValueError("Could not extract YouTube video ID from provided URL or ID")
 
 
-# class ScraperAPIAdapter(requests.adapters.HTTPAdapter):
-#     def send(self, request, **kwargs):
-#         # Rewrite the request URL to go through ScraperAPI
-#         original_url = request.url
-#         scraperapi_url = f'http://api.scraperapi.com/?api_key=d2908cd2f170a16799283633be47a58f&url={original_url}'
-#         request.url = scraperapi_url
-#         return super().send(request, **kwargs)
-
-# # Monkey-patch the session used by the YouTubeTranscriptApi
-# session = requests.Session()
-# session.mount('http://', ScraperAPIAdapter())
-# session.mount('https://', ScraperAPIAdapter())
-
-
 async def fetch_transcript_api(video_id: str, language_code: str = None) -> str:
     """
     Fetch transcript using YouTube Transcript API.
@@ -54,7 +39,7 @@ async def fetch_transcript_api(video_id: str, language_code: str = None) -> str:
         language_code (str, optional): Preferred language code. Defaults to None.
 
     Returns:
-        str: Formatted transcript text
+        str: Formatted transcript text with timestamp links
 
     Raises:
         HTTPException: If transcript cannot be fetched
@@ -80,9 +65,39 @@ async def fetch_transcript_api(video_id: str, language_code: str = None) -> str:
             lambda: ytt_api.fetch(video_id, languages=languages),
         )
 
-        formatter = TextFormatter()
-        transcript_text = formatter.format_transcript(transcript_list)
-        logger.debug("Successfully retrieved transcript using YouTube Transcript API")
+        formatted_segments = []
+        current_paragraph = []
+        last_timestamp = None
+
+        for i, segment in enumerate(transcript_list):
+            start_time = segment.start or 0
+            text = str(segment.text).strip()
+
+            if text:
+                current_paragraph.append(text)
+
+                is_sentence_end = text.endswith((".", "!", "?"))
+                time_gap = (
+                    (start_time - last_timestamp) > 30 if last_timestamp else True
+                )
+                is_last_segment = i == len(transcript_list) - 1
+
+                if is_sentence_end or time_gap or is_last_segment:
+                    paragraph_text = " ".join(current_paragraph)
+                    formatted_segments.append(f"{paragraph_text} [[{start_time:.1f}]]")
+                    current_paragraph = []
+                    last_timestamp = start_time
+
+        if current_paragraph:
+            paragraph_text = " ".join(current_paragraph)
+            formatted_segments.append(paragraph_text)
+
+        transcript_text = " ".join(formatted_segments)
+        with open("transcript.txt", "w") as f:
+            f.write(transcript_text)
+        logger.debug(
+            "Successfully retrieved transcript with timestamps using YouTube Transcript API"
+        )
 
         return transcript_text
 

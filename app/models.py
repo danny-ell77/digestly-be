@@ -9,7 +9,21 @@ from datetime import datetime
 from typing import TypedDict
 
 
-class Modes(str, Enum):
+class TimestampSegment(BaseModel):
+    start: float
+    duration: float
+    text: str
+    end: Optional[float] = None
+
+
+class TranscriptWithTimestamps(BaseModel):
+    video_id: str
+    transcript_text: str
+    segments: List[TimestampSegment]
+    size: str
+
+
+class DigestMode(str, Enum):
     TLDR = "tldr"
     KEY_INSIGHTS = "key_insights"
     COMPREHENSIVE = "comprehensive"
@@ -29,7 +43,7 @@ class TranscriptRequest(BaseModel):
     video_id: str
     language_code: Optional[str] = None
     prompt_template: Optional[str] = None
-    mode: Optional[Modes] = "comprehensive"  # Default to comprehensive mode
+    mode: DigestMode
     # output_mode: Optional[OutputMode] = "html"
     tags: Optional[list[str]] = list()
     duration: int

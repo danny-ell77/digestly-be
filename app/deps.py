@@ -5,6 +5,7 @@ from fastapi import Depends
 import googleapiclient.discovery
 from fastapi import HTTPException
 from groq import AsyncGroq
+from groq._types import NOT_GIVEN
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger("digestly")
@@ -39,7 +40,12 @@ def get_groq_client():
     client = AsyncGroq(api_key=api_key)
 
     async def get_chat_completion(
-        system_message: str, prompt: str, max_output_tokens: int, stream: bool = False
+        model: str,
+        temperature: float,
+        system_message: str,
+        prompt: str,
+        max_output_tokens: int,
+        stream: bool = False,
     ):
         """Get chat completion from Groq API"""
         try:
@@ -55,12 +61,17 @@ def get_groq_client():
                             "content": prompt,
                         },
                     ],
-                    model="llama-3.3-70b-versatile",
-                    temperature=0.5,
+                    model=model,
+                    temperature=temperature,
                     max_completion_tokens=max_output_tokens,
                     top_p=1,
                     stop=None,
                     stream=stream,
+                    reasoning_format=(
+                        "hidden"
+                        if model == "deepseek-r1-distill-llama-70b"
+                        else NOT_GIVEN
+                    ),
                 ),
                 timeout=300.0,  # 300 second timeout
             )

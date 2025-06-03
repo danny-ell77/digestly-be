@@ -1,22 +1,25 @@
 import os
 import logging
+import functools
+from typing import AsyncGenerator
+from app.decorators import track_usage
+from app.model_selector import ModelSelector
 from app.auth import CurrentUser
-from app.models import to_digestly_type, Modes
+from app.models import (
+    TranscriptRequest,
+    VideoDataResponse,
+    to_digestly_type,
+)
+from app.services.transcript_processor import (
+    get_transcript,
+    extract_video_id,
+)
 from app.db import supabase_client
-from app.credits import check_credits, deduct_credit
 from dotenv import load_dotenv
 from fastapi import FastAPI, HTTPException, Body
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import StreamingResponse
-from services import (
-    TranscriptRequest,
-    TranscriptResponse,
-    VideoDataResponse,
-    extract_video_id,
-    get_transcript,
-    process_transcript_with_llm,
-    process_transcript_in_chunks,
-)
+from app.services.content_processor import VideoProcessor
 from app.deps import (
     YoutubeClient,
     GroqClient,
@@ -47,7 +50,7 @@ async def root():
     return {"message": "YouTube Video Processor API is running"}
 
 
-@app.post("/transcript/", response_model=TranscriptResponse)
+@app.post("/transcript/", response_model=TranscripResponse)
 async def get_transcript_endpoint(request: TranscriptRequest):
     """Get transcript from YouTube video ID"""
     try:
@@ -69,6 +72,7 @@ async def get_transcript_endpoint(request: TranscriptRequest):
 
 
 @app.post("/process/")
+@track_usage
 async def process_transcript_endpoint(
     request: TranscriptRequest,
     user: CurrentUser,
@@ -78,36 +82,28 @@ async def process_transcript_endpoint(
     logger.info(
         f"Starting process_transcript function with video_id: {request.video_id}"
     )
-
-    await check_credits(user)
-
-    processor = (
-        process_transcript_in_chunks
-        if request.duration > 2400
-        and request.mode in [Modes.ARTICLE, Modes.COMPREHENSIVE]
-        else process_transcript_with_llm
+    video_id = request.video_id
+    model_config = ModelSelector().get_model_config(
+        request.mode, request.duration // 60
     )
-
+    llm_client = functools.partial(
+        groq_client, model_config.primary_model, model_config.temperature
+    )
+    processor = VideoProcessor(llm_client)
     try:
-        video_id = request.video_id
         transcript_text = await get_transcript(video_id, request.language_code)
-
-        mode = request.mode.value if request.mode else "comprehensive"
-        completion = await processor(
+        completion = await processor.process(
             transcript_text=transcript_text,
-            mode=mode,
-            groq_client=groq_client,
+            mode=request.mode,
             custom_prompt=request.prompt_template,
             stream=False,
             tags=request.tags,
+            duration=request.duration,
+            max_tokens=model_config.max_tokens,
         )
-
-        new_credit_balance = await deduct_credit(user["id"])
-
         return {
             "video_id": video_id,
             "response": completion,
-            "credits_remaining": new_credit_balance,
         }
     except ValueError as e:
         logger.error(f"Transcript not found error: {str(e)}", exc_info=True)
@@ -120,6 +116,7 @@ async def process_transcript_endpoint(
 
 
 @app.post("/process/stream/")
+@track_usage
 async def process_transcript_endpoint_stream(
     groq_client: GroqClient,
     user: CurrentUser,
@@ -128,29 +125,32 @@ async def process_transcript_endpoint_stream(
     logger.info(
         f"Starting process_transcript function with video_id: {request.video_id}"
     )
-    await check_credits(user)
 
     try:
+        video_id = request.video_id
         mode = request.mode.value if request.mode else "comprehensive"
 
-        video_id = request.video_id
+        model_config = ModelSelector().get_model_config(
+            request.mode, request.duration // 60
+        )
+        llm_client = functools.partial(
+            groq_client, model_config.primary_model, model_config.temperature
+        )
+        processor = VideoProcessor(llm_client)
+
         transcript_text = await get_transcript(video_id, request.language_code)
-        # transcript_text = process_youtube_video(
-        #     f"https://www.youtube.com/watch?v={video_id}"
-        # )
-        stream_generator = await process_transcript_with_llm(
+        stream_generator: AsyncGenerator[str, None] = await processor.process(
             transcript_text=transcript_text,
             mode=mode,
-            groq_client=groq_client,
             custom_prompt=request.prompt_template,
             tags=request.tags,
             stream=True,
+            max_tokens=model_config.max_tokens,
         )
 
         async def stream_generator_wrapper(generator):
             async for chunk in generator:
                 yield chunk
-            await deduct_credit(user["id"])
 
         return StreamingResponse(stream_generator_wrapper(stream_generator))
 
