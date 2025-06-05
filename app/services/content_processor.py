@@ -4,7 +4,6 @@ Simplified transcript processing service that handles both single-pass and chunk
 
 from typing import Optional, List, Callable, AsyncGenerator
 from app.logger import get_logger
-from app.models import DigestMode
 from app.prompts import (
     MAX_TRANSCRIPT_TOKENS,
     CHAR_TO_TOKEN_RATIO,
@@ -48,14 +47,14 @@ class VideoProcessor:
             The processed transcript
         """
         try:
-            if mode in [DigestMode.TLDR, DigestMode.KEY_INSIGHTS] and duration <= 2400:
+            if duration <= 2400 and stream:
                 transcript_text = truncate_transcript(transcript_text)
                 return await self._process_single_pass(
-                    transcript_text, mode, custom_prompt, stream, tags
+                    transcript_text, mode, custom_prompt, tags, stream=True
                 )
             else:
                 return await self._process_chunked(
-                    transcript_text, mode, custom_prompt, stream, tags, max_tokens
+                    transcript_text, mode, custom_prompt, tags, max_tokens, stream=False
                 )
 
         except Exception as e:
@@ -67,8 +66,8 @@ class VideoProcessor:
         transcript_text: str,
         mode: str,
         custom_prompt: Optional[str],
-        stream: bool,
         tags: Optional[List[str]],
+        stream: bool,
     ) -> str | AsyncGenerator[str, None]:
         """Process transcript in a single pass."""
         prompt = (
@@ -94,14 +93,13 @@ class VideoProcessor:
         transcript_text: str,
         mode: str,
         custom_prompt: Optional[str],
-        stream: bool,
         tags: Optional[List[str]],
         max_tokens: int,
+        stream: bool,
     ) -> str:
         """Process transcript in chunks."""
         import asyncio
 
-        # Split into chunks
         max_chars = int(max_tokens * CHAR_TO_TOKEN_RATIO)
         chunks = []
         current_pos = 0
@@ -114,13 +112,12 @@ class VideoProcessor:
             chunks.append(transcript_text[current_pos:chunk_end])
             current_pos = chunk_end
 
-        # Process chunks
         combined_response = ""
         previous_context = ""
 
         for i, chunk in enumerate(chunks):
             if i > 0:
-                await asyncio.sleep(20)  # Rate limiting delay
+                await asyncio.sleep(20)
 
             prompt = (
                 PromptBuilder()
@@ -140,7 +137,6 @@ class VideoProcessor:
 
             if isinstance(chunk_response, str):
                 if i < len(chunks) - 1:
-                    # Remove any conclusion markers from intermediate chunks
                     for marker in ["# Conclusion", "## Conclusion", "### Conclusion"]:
                         if marker in chunk_response:
                             chunk_response = chunk_response.split(marker)[0].strip()
@@ -153,7 +149,6 @@ class VideoProcessor:
                     else chunk_response
                 )
 
-        # Final processing of combined response
         await asyncio.sleep(20)
         prompt = (
             PromptBuilder()
