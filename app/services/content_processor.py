@@ -127,13 +127,16 @@ class VideoProcessor:
                 .with_previous_context(previous_context)
                 .build()
             )
-
-            chunk_response = await self.llm_client(
-                system_message=prompt.system_message,
-                prompt=prompt.user_message,
-                max_output_tokens=infer_output_tokens(mode, chunk),
-                stream=stream,
-            )
+            try:
+                chunk_response = await self.llm_client(
+                    system_message=prompt.system_message,
+                    prompt=prompt.user_message,
+                    max_output_tokens=infer_output_tokens(mode, chunk),
+                    stream=stream,
+                )
+            except Exception as e:
+                logger.error(f"Error processing chunk: {str(e)}")
+                chunk_response = ""
 
             if isinstance(chunk_response, str):
                 if i < len(chunks) - 1:

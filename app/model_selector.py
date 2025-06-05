@@ -67,14 +67,20 @@ class ModelSelector:
                 "comprehensive": {
                     "short": "meta-llama/llama-4-scout-17b-16e-instruct",
                     "medium": "llama-3.3-70b-versatile",
-                    "long": "deepseek-r1-distill-llama-70b",
-                    "very_long": "deepseek-r1-distill-llama-70b",
+                    "long": "llama-3.3-70b-versatile",
+                    "very_long": "llama-3.3-70b-versatile",
                 },
                 "article": {
                     "short": "meta-llama/llama-4-scout-17b-16e-instruct",
-                    "medium": "deepseek-r1-distill-llama-70b",
-                    "long": "deepseek-r1-distill-llama-70b",
-                    "very_long": "deepseek-r1-distill-llama-70b",
+                    "medium": "llama-3.3-70b-versatile",
+                    "long": "llama-3.3-70b-versatile",
+                    "very_long": "llama-3.3-70b-versatile",
+                },
+                "custom": {
+                    "short": "llama-3.1-8b-instant",
+                    "medium": "llama-3.3-70b-versatile",
+                    "long": "llama-3.3-70b-versatile",
+                    "very_long": "llama-3.3-70b-versatile",
                 },
             },
             "token_limits": {

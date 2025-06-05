@@ -8,7 +8,6 @@ from youtube_transcript_api import (
 from youtube_transcript_api.proxies import WebshareProxyConfig
 import re
 from app.logger import get_logger
-from xml.etree.ElementTree import ParseError
 from fastapi import HTTPException
 
 
@@ -21,7 +20,7 @@ def _retry_operation(func, max_retries: int = 3, delay: int = 5):
     for attempt in range(max_retries):
         try:
             return func()
-        except ParseError as e:
+        except Exception as e:
             if "no element found" in str(e) and attempt < max_retries - 1:
                 print(
                     f"XML parse error on attempt {attempt + 1}, retrying in {delay}s..."
