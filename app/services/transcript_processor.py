@@ -1,3 +1,4 @@
+import time
 import os
 from youtube_transcript_api import (
     YouTubeTranscriptApi,
@@ -7,10 +8,30 @@ from youtube_transcript_api import (
 from youtube_transcript_api.proxies import WebshareProxyConfig
 import re
 from app.logger import get_logger
+from xml.etree.ElementTree import ParseError
+from fastapi import HTTPException
+
 
 logger = get_logger("transcript")
 
 DEFAULT_LANGUAGE = "en"
+
+
+def _retry_operation(func, max_retries: int = 3, delay: int = 5):
+    for attempt in range(max_retries):
+        try:
+            return func()
+        except ParseError as e:
+            if "no element found" in str(e) and attempt < max_retries - 1:
+                print(
+                    f"XML parse error on attempt {attempt + 1}, retrying in {delay}s..."
+                )
+                time.sleep(delay)
+                delay *= 2  # exponential backoff
+            else:
+                raise HTTPException(
+                    status_code=400, detail="Unable to fetch transcript"
+                )
 
 
 def extract_video_id(url: str) -> str:
@@ -50,19 +71,24 @@ async def fetch_transcript_api(video_id: str, language_code: str = None) -> str:
         languages = [language_code] if language_code else None
         proxy_username = os.getenv("PROXY_USERNAME")
         proxy_password = os.getenv("PROXY_PASSWORD")
-        if proxy_username and proxy_password:
-            ytt_api = YouTubeTranscriptApi(
+        if not (proxy_username and proxy_password):
+            logger.error(
+                "Proxy credentials not set, using direct connection for YouTube Transcript API"
+            )
+            raise ValueError("Invalid configuration")
+
+        def _inner_fetch():
+            return YouTubeTranscriptApi(
                 proxy_config=WebshareProxyConfig(
                     proxy_username=proxy_username,
                     proxy_password=proxy_password,
                 )
-            )
-        else:
-            ytt_api = YouTubeTranscriptApi()
+            ).fetch(video_id, languages=languages)
+
         loop = asyncio.get_event_loop()
         transcript_list = await loop.run_in_executor(
             None,
-            lambda: ytt_api.fetch(video_id, languages=languages),
+            lambda: _retry_operation(_inner_fetch),
         )
 
         formatted_segments = []
