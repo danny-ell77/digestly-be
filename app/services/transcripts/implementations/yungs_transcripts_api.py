@@ -1,4 +1,5 @@
 import os
+import random
 import httpx
 from typing import Optional
 from app.logger import get_logger
@@ -39,7 +40,7 @@ class YungTranscriptsProcessor(BaseTranscriptProcessor):
                 },
                 headers={
                     "Content-Type": "application/json",
-                    "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36",
+                    "User-Agent": self._generate_user_agent(),
                 },
             )
 
@@ -116,3 +117,27 @@ class YungTranscriptsProcessor(BaseTranscriptProcessor):
         except Exception as e:
             logger.error(f"YoungTranscripts API error: {str(e)}")
             raise ValueError(f"Error retrieving transcript: {str(e)}")
+
+    def _generate_user_agent(self):
+        """Generate a realistic user agent string"""
+        # Different Chrome versions
+        chrome_versions = [
+            "110.0.5481.177",
+            "111.0.5563.64",
+            "112.0.5615.49",
+            "113.0.5672.63",
+            "114.0.5735.90",
+        ]
+
+        # Different OS versions
+        windows_versions = [
+            "Windows NT 10.0; Win64; x64",
+            "Windows NT 10.0; WOW64",
+            "Windows NT 6.3; Win64; x64",
+            "Windows NT 6.1; Win64; x64",
+        ]
+
+        chrome_version = random.choice(chrome_versions)
+        windows_version = random.choice(windows_versions)
+
+        return f"Mozilla/5.0 ({windows_version}) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/{chrome_version} Safari/537.36"
