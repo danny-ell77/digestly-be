@@ -134,6 +134,18 @@ class SupabaseUser(BaseModel):
         from_attributes = True
 
 
+class TranscriptRecord(BaseModel):
+    """Model for saved transcript records."""
+
+    video_id: str
+    content: str
+    created_at: Optional[datetime] = None
+    updated_at: Optional[datetime] = None
+
+    class Config:
+        from_attributes = True
+
+
 class DigestlyVideoType(TypedDict):
     video_id: str
     title: str

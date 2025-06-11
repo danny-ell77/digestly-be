@@ -11,11 +11,9 @@ from typing import Optional
 LOG_LEVEL = os.environ.get("LOG_LEVEL", "INFO").upper()
 LOG_FORMAT = "%(asctime)s - %(name)s - %(levelname)s - %(message)s"
 
-# Create logger
 logger = logging.getLogger("digestly")
 logger.setLevel(getattr(logging, LOG_LEVEL))
 
-# Add console handler if not already added
 if not logger.handlers:
     console_handler = logging.StreamHandler(sys.stdout)
     console_handler.setFormatter(logging.Formatter(LOG_FORMAT))

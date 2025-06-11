@@ -104,12 +104,17 @@ class ModelSelector:
                     "meta-llama/llama-4-scout-17b-16e-instruct": 6000,
                     "deepseek-r1-distill-llama-70b": 7000,
                 },
+                "custom": {
+                    "llama-3.1-8b-instant": 800,
+                    "llama-3.3-70b-versatile": 10000,
+                },
             },
             "temperature_settings": {
                 "tldr": 0.3,
                 "key_insights": 0.5,
                 "comprehensive": 0.7,
                 "article": 0.8,
+                "custom": 0.6,
             },
         }
 

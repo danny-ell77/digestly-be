@@ -18,6 +18,8 @@ from app.services.prompt_builder import PromptBuilder
 
 logger = get_logger("transcript_service")
 
+CONCLUSION_MARKERS = ["# Conclusion", "## Conclusion", "### Conclusion"]
+
 
 class VideoProcessor:
     def __init__(self, llm_client: Callable):
@@ -114,7 +116,9 @@ class VideoProcessor:
 
         combined_response = ""
         previous_context = ""
-
+        logger.info(
+            f"Processing {len(chunks)} chunks for mode '{mode}' with tags: {tags}"
+        )
         for i, chunk in enumerate(chunks):
             if i > 0:
                 await asyncio.sleep(20)
@@ -138,11 +142,10 @@ class VideoProcessor:
                 logger.error(f"Error processing chunk: {str(e)}")
                 chunk_response = ""
 
-            if isinstance(chunk_response, str):
-                if i < len(chunks) - 1:
-                    for marker in ["# Conclusion", "## Conclusion", "### Conclusion"]:
-                        if marker in chunk_response:
-                            chunk_response = chunk_response.split(marker)[0].strip()
+            if isinstance(chunk_response, str) and i < len(chunks) - 1:
+                for marker in CONCLUSION_MARKERS:
+                    if marker in chunk_response:
+                        chunk_response = chunk_response.split(marker)[0].strip()
 
                 combined_response += "\n\n" + chunk_response
                 sentences = chunk_response.split(". ")
@@ -161,12 +164,15 @@ class VideoProcessor:
             .with_custom_prompt(custom_prompt)
             .build()
         )
-
-        final_response = await self.llm_client(
-            system_message=prompt.system_message,
-            prompt=prompt.user_message,
-            max_output_tokens=infer_output_tokens(mode, combined_response),
-            stream=False,
-        )
+        try:
+            final_response = await self.llm_client(
+                system_message=prompt.system_message,
+                prompt=prompt.user_message,
+                max_output_tokens=infer_output_tokens(mode, combined_response),
+                stream=False,
+            )
+        except Exception as e:
+            logger.error(f"Error processing final response: {str(e)}")
+            final_response = combined_response
 
         return final_response.strip()

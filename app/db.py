@@ -163,5 +163,102 @@ class SupabaseClient:
             logger.exception(f"Error creating anonymous profile: {str(e)}")
             return None
 
+    async def save_transcript(self, video_id: str, content: str):
+        """
+        Save transcript content for a video to the transcripts table.
+
+        Args:
+            video_id: The YouTube video ID
+            content: The transcript content
+
+        Returns:
+            True if successful, False otherwise
+        """
+        try:
+            async with httpx.AsyncClient() as client:
+                response = await client.post(
+                    f"{self.url}/rest/v1/video_content",
+                    headers=self.headers,
+                    json={
+                        "video_id": video_id,
+                        "transcript": content,
+                        "created_at": "now()",
+                    },
+                )
+
+                if response.status_code in (200, 201):
+                    logger.info(f"Transcript saved for video {video_id}")
+                    return True
+                else:
+                    logger.warning(
+                        f"Failed to save transcript for video {video_id}. "
+                        f"Status: {response.status_code}, Response: {response.text}"
+                    )
+                    return False
+        except Exception as e:
+            logger.exception(f"Error saving transcript: {str(e)}")
+            return False
+
+    async def get_transcript(self, video_id: str):
+        """
+        Get transcript content for a video from the transcripts table.
+
+        Args:
+            video_id: The YouTube video ID
+
+        Returns:
+            The transcript content or None if not found
+        """
+        try:
+            async with httpx.AsyncClient() as client:
+                response = await client.get(
+                    f"{self.url}/rest/v1/video_content",
+                    headers=self.headers,
+                    params={
+                        "video_id": f"eq.{video_id}",
+                        "select": "transcript",
+                    },
+                )
+
+                if response.status_code == 200 and response.json():
+                    return response.json()[0]["transcript"]
+                else:
+                    logger.info(f"No saved transcript found for video {video_id}")
+                    return None
+        except Exception as e:
+            logger.exception(f"Error getting saved transcript: {str(e)}")
+            return None
+
+    async def delete_transcript(self, video_id: str):
+        """
+        Delete transcript for a video from the transcripts table.
+
+        Args:
+            video_id: The YouTube video ID
+
+        Returns:
+            True if transcript was deleted, False otherwise
+        """
+        try:
+            async with httpx.AsyncClient() as client:
+                response = await client.delete(
+                    f"{self.url}/rest/v1/video_content",
+                    headers=self.headers,
+                    params={"video_id": f"eq.{video_id}"},
+                )
+
+                if response.status_code == 204:
+                    logger.info(f"Transcript deleted for video {video_id}")
+                    return True
+                else:
+                    logger.warning(
+                        f"No transcript found to delete for video {video_id}. "
+                        f"Status: {response.status_code}"
+                    )
+                    return False
+        except Exception as e:
+            logger.exception(f"Error deleting transcript: {str(e)}")
+            return False
+
 
 supabase_client = SupabaseClient()

@@ -13,26 +13,16 @@ def track_usage(func: Callable):
 
     @wraps(func)
     async def wrapper(*args, user: CurrentUser, **kwargs):
-        logger.info(f"Starting usage tracking for function {func.__name__}")
-        logger.debug(f"User ID: {user.get('id')}, Email: {user.get('email')}")
 
         try:
-            logger.info("Checking user credits...")
             await check_credits(user)
-            logger.info("Credit check passed")
 
             if asyncio.iscoroutinefunction(func):
-                logger.debug("Executing async function")
                 result = await func(*args, user=user, **kwargs)
             else:
-                logger.debug("Executing sync function")
                 result = func(*args, user=user, **kwargs)
 
-            logger.info("Function execution completed successfully")
-
-            logger.info("Deducting credit...")
-            new_balance = await deduct_credit(user["id"])
-            logger.info(f"Credit deducted. New balance: {new_balance}")
+            await deduct_credit(user["id"])
 
             return result
 

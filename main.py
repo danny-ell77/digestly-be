@@ -11,16 +11,14 @@ from app.models import (
     VideoDataResponse,
     to_digestly_type,
 )
-from app.services.transcript_processor import (
-    get_transcript,
-    extract_video_id,
-)
+
 from app.db import supabase_client
 from dotenv import load_dotenv
 from fastapi import FastAPI, HTTPException, Body
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import StreamingResponse
 from app.services.content_processor import VideoProcessor
+from app.services.transcripts.processor import TranscriptProcessor
 from app.deps import (
     YoutubeClient,
     GroqClient,
@@ -46,6 +44,22 @@ app.add_middleware(
 )
 
 
+def extract_video_id(video_id: str) -> str:
+    """Extract video ID from YouTube URL or ID"""
+    import re
+
+    patterns = [
+        r"^(?:https?:\/\/)?(?:www\.)?(?:youtube\.com\/(?:watch\?v=|embed\/|v\/)|youtu\.be\/)([a-zA-Z0-9_-]{11})",
+        r"^([a-zA-Z0-9_-]{11})$",
+    ]
+
+    for pattern in patterns:
+        if match := re.search(pattern, video_id):
+            return match.group(1)
+
+    raise ValueError(f"Invalid YouTube video ID or URL: {video_id}")
+
+
 @app.get("/")
 async def root():
     return {"message": "YouTube Video Processor API is running"}
@@ -56,7 +70,10 @@ async def get_transcript_endpoint(request: TranscriptRequest):
     """Get transcript from YouTube video ID"""
     try:
         video_id = request.video_id
-        transcript_text = await get_transcript(video_id, request.language_code)
+        transcript_processor = TranscriptProcessor()
+        transcript_text = await transcript_processor.fetch_transcript(
+            video_id, request.language_code
+        )
 
         return {
             "video_id": video_id,
@@ -90,9 +107,21 @@ async def process_transcript_endpoint(
     llm_client = functools.partial(
         groq_client, model_config.primary_model, model_config.temperature
     )
+    transcript_processor = TranscriptProcessor()
     processor = VideoProcessor(llm_client)
+
     try:
-        transcript_text = await get_transcript(video_id, request.language_code)
+        transcript_text = await transcript_processor.fetch_transcript(
+            video_id, request.language_code
+        )
+
+        # Check if video is longer than 45 minutes (2700 seconds) and save transcript
+        # if request.duration > 2700:  # 45 minutes in seconds
+        #     logger.info(
+        #         f"Video {video_id} is longer than 45 minutes ({request.duration/60:.1f} mins), saving transcript"
+        #     )
+        await supabase_client.save_transcript(video_id, transcript_text)
+
         completion = await processor.process(
             transcript_text=transcript_text,
             mode=request.mode,
@@ -137,10 +166,21 @@ async def process_transcript_endpoint_stream(
         llm_client = functools.partial(
             groq_client, model_config.primary_model, model_config.temperature
         )
-        processor = VideoProcessor(llm_client)
 
-        transcript_text = await get_transcript(video_id, request.language_code)
-        stream_generator: AsyncGenerator[str, None] = await processor.process(
+        transcript_processor = TranscriptProcessor()
+        processor = VideoProcessor(llm_client)
+        # transcript_text = await process_youtube_video(video_id)
+        transcript_text = await transcript_processor.fetch_transcript(
+            video_id, request.language_code
+        )
+
+        if request.duration > 2700:  # 45 minutes in seconds
+            logger.info(
+                f"Video {video_id} is longer than 45 minutes ({request.duration/60:.1f} mins), saving transcript"
+            )
+            await supabase_client.save_transcript(video_id, transcript_text)
+
+        completion: AsyncGenerator[str, None] = await processor.process(
             transcript_text=transcript_text,
             mode=mode,
             custom_prompt=request.prompt_template,
@@ -153,7 +193,7 @@ async def process_transcript_endpoint_stream(
             async for chunk in generator:
                 yield chunk
 
-        return StreamingResponse(stream_generator_wrapper(stream_generator))
+        return StreamingResponse(stream_generator_wrapper(completion))
 
     except ValueError as e:
         logger.error(f"Transcript not found error: {str(e)}", exc_info=True)

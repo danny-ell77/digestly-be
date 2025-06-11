@@ -47,7 +47,8 @@ class PromptBuilder:
 
     def with_custom_prompt(self, prompt: Optional[str]) -> "PromptBuilder":
         """Set a custom prompt template."""
-        self._components["custom_prompt"] = prompt
+        if prompt is not None:
+            self._components["custom_prompt"] = prompt
         return self
 
     def with_chunk_info(
@@ -77,31 +78,42 @@ class PromptBuilder:
                 base_system_message=base_system_message,
                 chunk_index=self._components["chunk_index"],
                 total_chunks=self._components["total_chunks"],
-                previous_context=self._components["previous_context"],
+                previous_context=self._get_previous_context(),
             )
 
         return base_system_message
+
+    def _get_previous_context(self) -> str:
+        """Get the previous context for chunked processing."""
+        if context := self._components.get("previous_context", ""):
+            return context
+        logger.warning("No previous context provided.")
+        return ""
 
     def _build_prompt(self) -> str:
         """Build the prompt based on components."""
         mode = self._components.get("mode")
         if not mode:
             raise ValueError("Mode is required to build prompt")
+        prompt = ""
 
-        # Handle chunked processing
+        if {"custom_prompt", "transcript"}.issubset(self._components.keys()):
+            prompt += self._components["transcript"] + "\n\n"
+            prompt += self._components["custom_prompt"]
+            return prompt
+
         if "chunk" in self._components:
-            return get_chunk_prompt(
+            prompt += get_chunk_prompt(
                 mode=mode,
                 chunk=self._components["chunk"],
                 chunk_index=self._components["chunk_index"],
                 total_chunks=self._components["total_chunks"],
             )
+            return prompt
 
-        # Handle single-pass processing
-        prompt_template = get_prompt_template(
-            mode, self._components.get("custom_prompt")
-        )
-        return prompt_template.format(transcript=self._components.get("transcript", ""))
+        # Fallback to default prompt template if no custom prompt is provided
+        prompt_template = get_prompt_template(mode)
+        return prompt_template.format(transcript=self._components["transcript"])
 
     def build(self) -> Prompt:
         """Build and return the complete prompt (system_message, prompt)."""
