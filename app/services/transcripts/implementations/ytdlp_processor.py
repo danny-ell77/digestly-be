@@ -1,5 +1,5 @@
 import re
-import os
+from app.settings import settings
 import yt_dlp
 from app.logger import get_logger
 from ..transcript_types import BaseTranscriptProcessor
@@ -9,15 +9,10 @@ logger = get_logger("transcript")
 
 class YTDLPProcessor(BaseTranscriptProcessor):
     def __init__(self):
-        proxy_username = os.getenv("PROXY_USERNAME")
-        proxy_password = os.getenv("PROXY_PASSWORD")
-
-        if not (proxy_username and proxy_password):
-            logger.error("Proxy credentials not set")
-            raise ValueError("Invalid configuration")
+        proxy_username = settings.proxy_username
+        proxy_password = settings.proxy_password
 
         proxy_url = f"http://{proxy_username}:{proxy_password}@p.webshare.io:80"
-
         self.ydl_opts = {
             "writesubtitles": True,
             "writeautomaticsub": True,

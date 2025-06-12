@@ -1,5 +1,5 @@
 import time
-import os
+from app.settings import settings
 from typing import Optional
 from youtube_transcript_api import (
     YouTubeTranscriptApi,
@@ -15,11 +15,8 @@ logger = get_logger("transcript")
 
 class YouTubeTranscriptAPIProcessor(BaseTranscriptProcessor):
     def __init__(self):
-        self.proxy_username = os.getenv("PROXY_USERNAME")
-        self.proxy_password = os.getenv("PROXY_PASSWORD")
-        if not (self.proxy_username and self.proxy_password):
-            logger.error("Proxy credentials not set")
-            raise ValueError("Invalid configuration")
+        self.proxy_username = settings.proxy_username
+        self.proxy_password = settings.proxy_password
 
     def _retry_operation(self, func, max_retries: int = 4, delay: int = 5):
         for attempt in range(max_retries):

@@ -2,29 +2,19 @@
 Supabase database client.
 """
 
-import os
+from app.settings import settings
 import logging
 import httpx
-from dotenv import load_dotenv
-
-# Load environment variables
-load_dotenv()
 
 logger = logging.getLogger("digestly")
-
-SUPABASE_URL = os.getenv("SUPABASE_URL", "https://sdmcnnyuiyzmazdakglz.supabase.co")
-SUPABASE_SERVICE_ROLE_KEY = os.getenv("SUPABASE_SERVICE_ROLE_KEY", "")
-
-if not SUPABASE_SERVICE_ROLE_KEY:
-    logger.warning("SUPABASE_SERVICE_ROLE_KEY not set in environment")
 
 
 class SupabaseClient:
     """Client for interacting with Supabase database."""
 
     def __init__(self):
-        self.url = SUPABASE_URL
-        self.service_key = SUPABASE_SERVICE_ROLE_KEY
+        self.url = settings.supabase_url
+        self.service_key = settings.supabase_service_role_key
         self.headers = {
             "Apikey": self.service_key,
             "Authorization": f"Bearer {self.service_key}",

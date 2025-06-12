@@ -1,22 +1,12 @@
 from uuid import UUID
-import os
+from app.settings import settings
 from typing import Optional, Dict, Any, Annotated
 import logging
 from fastapi import Depends, Request, HTTPException
 import jwt
-from dotenv import load_dotenv
 from app.constants import ANON_ID_FRAGMENT
 
-load_dotenv()
-
 logger = logging.getLogger("digestly")
-
-# Supabase configuration
-SUPABASE_URL = os.getenv("SUPABASE_URL", "https://sdmcnnyuiyzmazdakglz.supabase.co")
-SUPABASE_JWT_SECRET = os.getenv("SUPABASE_JWT_SECRET", "")
-
-if not SUPABASE_JWT_SECRET:
-    logger.warning("SUPABASE_JWT_SECRET not set in environment")
 
 ValidateAnonId = UUID
 
@@ -34,13 +24,10 @@ def validate_jwt_token(token: str) -> Dict[str, Any]:
     Raises:
         HTTPException: If token is invalid or verification fails
     """
-    if not SUPABASE_JWT_SECRET:
-        raise HTTPException(status_code=500, detail="JWT secret not configured")
-
     try:
         payload = jwt.decode(
             token,
-            SUPABASE_JWT_SECRET,
+            settings.supabase_jwt_secret,
             algorithms=["HS256"],
             audience="authenticated",  # Supabase default audience
         )

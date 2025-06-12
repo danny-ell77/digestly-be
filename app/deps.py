@@ -1,5 +1,5 @@
 import logging
-import os
+from app.settings import settings
 from typing import Annotated
 from fastapi import Depends
 import googleapiclient.discovery
@@ -14,15 +14,10 @@ logger = logging.getLogger("digestly")
 def get_youtube_client():
     import httplib2
 
-    api_key = os.getenv("YOUTUBE_API_KEY")
-    if not api_key:
-        logger.warning("YouTube API key not found, skipping YouTube Data API")
-        raise ValueError("YouTube API key not set")
-
     http = httplib2.Http(timeout=10)  # 10 second timeout
 
     return googleapiclient.discovery.build(
-        "youtube", "v3", developerKey=api_key, http=http
+        "youtube", "v3", developerKey=settings.youtube_api_key, http=http
     )
 
 
@@ -30,14 +25,7 @@ def get_groq_client():
     """Get Groq API client with API key"""
     import asyncio
 
-    api_key = os.getenv("GROQ_API_KEY")
-
-    if not api_key:
-        raise HTTPException(
-            status_code=500, detail="GROQ_API_KEY not set in environment"
-        )
-
-    client = AsyncGroq(api_key=api_key)
+    client = AsyncGroq(api_key=settings.groq_api_key)
 
     async def get_chat_completion(
         model: str,

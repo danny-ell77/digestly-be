@@ -1,25 +1,18 @@
-import os
 import random
 import httpx
 from typing import Optional
 from app.logger import get_logger
 from ..transcript_types import BaseTranscriptProcessor
+from app.settings import settings
 
 logger = get_logger("transcript")
 
 
-class YungTranscriptsProcessor(BaseTranscriptProcessor):
+class ArchiesTranscriptsProcessor(BaseTranscriptProcessor):
     def __init__(self):
-        self.api_url = "https://www.youtubetranscripts.io/api/fetch-video"
+        self.api_url = settings.archies_transcripts_api_url
 
-        proxy_username = os.getenv("PROXY_USERNAME")
-        proxy_password = os.getenv("PROXY_PASSWORD")
-
-        if not (proxy_username and proxy_password):
-            logger.error("Proxy credentials not set")
-            raise ValueError("Invalid configuration")
-
-        proxy_url = f"http://{proxy_username}:{proxy_password}@p.webshare.io:80"
+        proxy_url = f"http://{settings.proxy_username}:{settings.proxy_password}@p.webshare.io:80"
 
         self.client = httpx.AsyncClient(
             timeout=30.0,  # 30 second timeout
