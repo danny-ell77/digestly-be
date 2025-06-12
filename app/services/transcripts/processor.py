@@ -2,7 +2,7 @@ from .transcript_types import BaseTranscriptProcessor
 from typing import Optional, List
 from app.logger import get_logger
 from .implementations.ytdlp_processor import YTDLPProcessor
-from .implementations.yungs_transcripts_api import YungTranscriptsProcessor
+from .implementations.archies_transcripts_api import ArchiesTranscriptsProcessor
 
 logger = get_logger("transcript")
 
@@ -13,7 +13,7 @@ class TranscriptProcessor(BaseTranscriptProcessor):
     def __init__(self):
 
         self.processors: List[BaseTranscriptProcessor] = [
-            YungTranscriptsProcessor(),
+            ArchiesTranscriptsProcessor(),
             YTDLPProcessor(),
         ]
 
