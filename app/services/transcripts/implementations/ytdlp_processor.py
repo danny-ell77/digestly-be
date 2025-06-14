@@ -1,4 +1,6 @@
 import re
+import json
+from app.db import supabase_client
 from app.settings import settings
 import yt_dlp
 from app.logger import get_logger
@@ -210,6 +212,11 @@ class YTDLPProcessor(BaseTranscriptProcessor):
 
                 if not segments:
                     raise ValueError("Could not parse subtitle content")
+
+                await supabase_client.save_transcript(
+                    video_id=video_id,
+                    content=json.dumps(segments),
+                )
 
                 transcript_text = self.format_transcript_with_timestamps(segments)
 

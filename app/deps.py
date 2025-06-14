@@ -1,3 +1,4 @@
+import asyncio
 import logging
 from app.settings import settings
 from typing import Annotated
@@ -23,7 +24,6 @@ def get_youtube_client():
 
 def get_groq_client():
     """Get Groq API client with API key"""
-    import asyncio
 
     client = AsyncGroq(api_key=settings.groq_api_key)
 
@@ -34,6 +34,8 @@ def get_groq_client():
         prompt: str,
         max_output_tokens: int,
         stream: bool = False,
+        *args,  # For future extensibility
+        **kwargs,  # For future extensibility
     ):
         """Get chat completion from Groq API"""
         try:
@@ -60,6 +62,7 @@ def get_groq_client():
                         if model == "deepseek-r1-distill-llama-70b"
                         else NOT_GIVEN
                     ),
+                    **kwargs,  # For future extensibility
                 ),
                 timeout=300.0,  # 300 second timeout
             )

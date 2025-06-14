@@ -1,9 +1,12 @@
+import json
 import random
 import httpx
 from typing import Optional
 from app.logger import get_logger
 from ..transcript_types import BaseTranscriptProcessor
 from app.settings import settings
+from app.db import supabase_client
+
 
 logger = get_logger("transcript")
 
@@ -68,8 +71,24 @@ class ArchiesTranscriptsProcessor(BaseTranscriptProcessor):
                 raise ValueError("No transcript available for this video")
 
             transcript_segments = result.get("transcript", [])
+
             if not transcript_segments:
                 raise ValueError("No transcript segments found")
+
+            await supabase_client.save_transcript(
+                video_id=video_id,
+                content=json.dumps(
+                    list(
+                        map(
+                            lambda segment: {
+                                "start": segment.get("offset", 0),
+                                "text": segment.get("text", "").strip(),
+                            },
+                            transcript_segments,
+                        )
+                    )
+                ),
+            )
 
             # Format the transcript segments
             formatted_segments = []

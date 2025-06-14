@@ -189,7 +189,7 @@ class SupabaseClient:
             logger.exception(f"Error saving transcript: {str(e)}")
             return False
 
-    async def get_transcript(self, video_id: str):
+    async def get_transcript(self, video_id: str, language_code: str = "en"):
         """
         Get transcript content for a video from the transcripts table.
 

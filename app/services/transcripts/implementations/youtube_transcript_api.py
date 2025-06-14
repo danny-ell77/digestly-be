@@ -1,5 +1,9 @@
+import json
 import time
+
+from dataclasses import asdict
 from app.settings import settings
+from app.db import supabase_client
 from typing import Optional
 from youtube_transcript_api import (
     YouTubeTranscriptApi,
@@ -47,6 +51,11 @@ class YouTubeTranscriptAPIProcessor(BaseTranscriptProcessor):
                 ).fetch(video_id, languages=languages)
 
             transcript_list = self._retry_operation(_inner_fetch)
+
+            await supabase_client.save_transcript(
+                video_id=video_id,
+                content=json.dumps(asdict(transcript_list)["snippets"]),
+            )
 
             formatted_segments = []
             current_paragraph = []

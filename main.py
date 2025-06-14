@@ -7,13 +7,11 @@ from app.model_selector import ModelSelector
 from app.auth import CurrentUser
 from app.models import (
     TranscriptRequest,
-    TranscriptResponse,
     VideoDataResponse,
     to_digestly_type,
 )
 
 from app.db import supabase_client
-from dotenv import load_dotenv
 from fastapi import FastAPI, HTTPException, Body
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import StreamingResponse
@@ -23,8 +21,8 @@ from app.deps import (
     YoutubeClient,
     GroqClient,
 )
+from app.prompts import MIND_MAP_PROMPT, MIND_MAP_SYSTEM_MESSAGE
 
-load_dotenv()
 logger = logging.getLogger("digestly")
 
 app = FastAPI(
@@ -65,30 +63,6 @@ async def root():
     return {"message": "YouTube Video Processor API is running"}
 
 
-@app.post("/transcript/", response_model=TranscriptResponse)
-async def get_transcript_endpoint(request: TranscriptRequest):
-    """Get transcript from YouTube video ID"""
-    try:
-        video_id = request.video_id
-        transcript_processor = TranscriptProcessor()
-        transcript_text = await transcript_processor.fetch_transcript(
-            video_id, request.language_code
-        )
-
-        return {
-            "video_id": video_id,
-            "transcript": transcript_text,
-            "size": f"{len(transcript_text.split())} words, {len(transcript_text)} characters",
-            "claude_response": None,  # Not processing with Claude yet
-        }
-    except ValueError as e:
-        raise HTTPException(status_code=404, detail=f"Transcript not found: {str(e)}")
-    except Exception as e:
-        raise HTTPException(
-            status_code=500, detail=f"Error retrieving transcript: {str(e)}"
-        )
-
-
 @app.post("/process/")
 @track_usage
 async def process_transcript_endpoint(
@@ -114,13 +88,6 @@ async def process_transcript_endpoint(
         transcript_text = await transcript_processor.fetch_transcript(
             video_id, request.language_code
         )
-
-        # Check if video is longer than 45 minutes (2700 seconds) and save transcript
-        # if request.duration > 2700:  # 45 minutes in seconds
-        #     logger.info(
-        #         f"Video {video_id} is longer than 45 minutes ({request.duration/60:.1f} mins), saving transcript"
-        #     )
-        await supabase_client.save_transcript(video_id, transcript_text)
 
         completion = await processor.process(
             transcript_text=transcript_text,
@@ -173,12 +140,6 @@ async def process_transcript_endpoint_stream(
         transcript_text = await transcript_processor.fetch_transcript(
             video_id, request.language_code
         )
-
-        if request.duration > 2700:  # 45 minutes in seconds
-            logger.info(
-                f"Video {video_id} is longer than 45 minutes ({request.duration/60:.1f} mins), saving transcript"
-            )
-            await supabase_client.save_transcript(video_id, transcript_text)
 
         completion: AsyncGenerator[str, None] = await processor.process(
             transcript_text=transcript_text,
@@ -245,45 +206,64 @@ async def fetch_video_metadata(
         )
 
 
-@app.get("/user/profile/")
-async def get_user_profile(user: CurrentUser):
-    """Get authenticated user profile - requires valid authentication"""
-    # Create Supabase client to get updated profile info
-    profile = await supabase_client.get_profile(user["id"])
+@app.get("/transcript/saved/{video_id}")
+async def get_saved_transcript(video_id: str):
+    """Get saved transcript from database for a video ID"""
+    try:
+        video_id = extract_video_id(video_id)
+        transcript_text = await supabase_client.get_transcript(video_id)
 
-    credits_ = profile.get("credits", 0) if profile else 0
-    is_premium = profile.get("isPremium", False) if profile else False
+        if not transcript_text:
+            raise HTTPException(
+                status_code=404,
+                detail=f"No saved transcript found for video ID: {video_id}",
+            )
 
-    return {
-        "id": user["id"],
-        "email": user["email"],
-        "app_metadata": user["app_metadata"],
-        "user_metadata": user["user_metadata"],
-        "created_at": user["created_at"],
-        "credits": credits_,
-        "isPremium": is_premium,
-    }
-
-
-@app.post("/user/profiles-anon/")
-async def create_anonymous_profile(data: dict = Body(...)):
-    """Create an anonymous user profile with initial credits"""
-    anonymous_profile = await supabase_client.create_anonymous_profile(data)
-    if not anonymous_profile:
+        return {
+            "video_id": video_id,
+            "transcript": transcript_text,
+            "size": f"{len(transcript_text.split())} words, {len(transcript_text)} characters",
+            "source": "database",
+        }
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error retrieving saved transcript: {str(e)}")
         raise HTTPException(
-            status_code=500, detail="Failed to create anonymous user profile"
+            status_code=500, detail=f"Error retrieving saved transcript: {str(e)}"
         )
-    return {
-        "anon_user_id": anonymous_profile["anon_user_id"],
-        "credits": anonymous_profile.get("credits", 0),
-        "isAnonymous": True,
-    }
+
+
+@app.get("/mind-map")
+@track_usage
+async def build_mind_map(video_id: str, user: CurrentUser, groq_client: GroqClient):
+    try:
+        transcript = await TranscriptProcessor().fetch_transcript(video_id, "en")
+        if not transcript:
+            raise HTTPException(
+                status_code=404,
+                detail=f"No transcript found for video ID: {video_id}",
+            )
+    except ValueError as e:
+        logger.error(f"Transcript not found error: {str(e)}")
+        raise HTTPException(status_code=404, detail=str(e))
+    user_message = MIND_MAP_PROMPT + "\n\n" + str(transcript)
+    completion = await groq_client(
+        model="deepseek-r1-distill-llama-70b",
+        temperature=0.7,
+        system_message=MIND_MAP_SYSTEM_MESSAGE,
+        prompt=user_message,
+        max_output_tokens=3500,
+        stream=False,
+        response_format={"type": "json_object"},
+    )
+    return {"video_id": video_id, "map": completion}
 
 
 if __name__ == "__main__":
     import uvicorn
 
     HOST = os.environ.get("HOST", "localhost")
-    PORT = os.environ.get("PORT", 5000)
+    PORT = os.environ.get("PORT", 10000)
 
     uvicorn.run("main:app", host=HOST, port=int(PORT), reload=True)

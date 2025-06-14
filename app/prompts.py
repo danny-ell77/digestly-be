@@ -304,3 +304,45 @@ def get_chunk_prompt(
             )
 
     return f"Process this part of the content:\n\n{chunk}"
+
+
+MIND_MAP_SYSTEM_MESSAGE = """
+You are a mind mapping assistant that generates 
+React Flow–compatible JSON structures based on provided topics.
+You strictly follow Tony Buzan’s mind mapping principles
+to produce a visually organized, hierarchical, and memory-enhancing layout.
+"""
+
+MIND_MAP_PROMPT = """
+Generate a valid ReactFlow JSON structure for a mind map diagram based on these topics: [LIST YOUR TOPICS HERE]
+
+Apply Tony Buzan's mind mapping principles:
+- Start with a central topic/theme as the core node
+- Branch out from center with main branches (primary topics)
+- Create sub-branches from main branches (secondary and tertiary topics)
+- Use hierarchical structure: central → main branches → sub-branches → details
+- Connect related concepts with logical relationships
+- Keep branch labels concise (1-3 words when possible)
+- Organize in a radial pattern emanating from the center
+- **Include relevant emojis in ALL node labels to enhance visual memory and engagement**
+
+Technical requirements:
+- Use format: {"nodes": [...], "edges": [...]}
+- Node positions must be objects: "position": {"x": 100, "y": 200}
+- Each node needs: id, type, position, and data.label
+- Each edge needs: id, source, target, and optional label (NOT data.label)
+- Node types: "input" for leaf/detail nodes, "default" for main branches, "output" for outcomes/conclusions
+- Space nodes 200-300px apart radially from center
+- Position central topic at approximately {"x": 400, "y": 300}
+- Arrange main branches in circular pattern around center
+- Place sub-branches extending outward from their parent branches
+
+Label format examples:
+- "🧠 Central Topic"
+- "💡 Main Branch"
+- "📊 Data Analysis"
+- "🎯 Goals"
+- "⚡ Quick Actions"
+
+Create logical parent-child relationships between connected concepts following the natural hierarchy of the subject matter.
+"""
