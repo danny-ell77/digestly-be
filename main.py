@@ -234,7 +234,7 @@ async def get_saved_transcript(video_id: str):
         )
 
 
-@app.get("/mind-map")
+@app.get("/mind-map/")
 @track_usage
 async def build_mind_map(video_id: str, user: CurrentUser, groq_client: GroqClient):
     try:
