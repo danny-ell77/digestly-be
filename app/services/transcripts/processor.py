@@ -5,7 +5,7 @@ from app.logger import get_logger
 from app.db import supabase_client
 from .implementations.ytdlp_processor import YTDLPProcessor
 from .implementations.archies_transcripts_api import ArchiesTranscriptsProcessor
-from .implementations.youtube_transcript_api import YouTubeTranscriptApi
+from .implementations.youtube_transcript_api import YouTubeTranscriptAPIProcessor
 
 logger = get_logger("transcript")
 
@@ -53,7 +53,7 @@ class TranscriptProcessor(BaseTranscriptProcessor):
         self.processors: List[BaseTranscriptProcessor] = [
             SupabaseTranscriptProcessor(),  # This serves as a caching layer
             ArchiesTranscriptsProcessor(),
-            YouTubeTranscriptApi(),
+            YouTubeTranscriptAPIProcessor(),
             YTDLPProcessor(),
         ]
 

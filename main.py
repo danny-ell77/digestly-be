@@ -247,14 +247,15 @@ async def build_mind_map(video_id: str, user: CurrentUser, groq_client: GroqClie
     except ValueError as e:
         logger.error(f"Transcript not found error: {str(e)}")
         raise HTTPException(status_code=404, detail=str(e))
-    user_message = MIND_MAP_PROMPT + "\n\n" + str(transcript)
+    user_message = MIND_MAP_PROMPT.format(transcript=transcript)
     completion = await groq_client(
-        model="deepseek-r1-distill-llama-70b",
+        model="llama-3.3-70b-versatile",
         temperature=0.7,
         system_message=MIND_MAP_SYSTEM_MESSAGE,
         prompt=user_message,
-        max_output_tokens=3500,
+        max_output_tokens=7000,
         stream=False,
+        # reasoning_format="hidden",
         response_format={"type": "json_object"},
     )
     return {"video_id": video_id, "map": completion}
