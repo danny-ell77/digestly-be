@@ -121,7 +121,7 @@ class VideoProcessor:
         )
         for i, chunk in enumerate(chunks):
             if i > 0:
-                await asyncio.sleep(20)
+                await asyncio.sleep(5)
 
             prompt = (
                 PromptBuilder()
@@ -155,7 +155,7 @@ class VideoProcessor:
                     else chunk_response
                 )
 
-        await asyncio.sleep(20)
+        await asyncio.sleep(5)
         prompt = (
             PromptBuilder()
             .with_mode(mode)
